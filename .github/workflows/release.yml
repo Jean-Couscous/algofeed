@@ -1,4 +1,4 @@
-# Every push to main: run the tests, then publish release v0.1.<run number> with
+# Every push to main: run the tests, then publish the next release v0.1.<N> with
 #  - the signed Android APK,
 #  - the desktop app as an AppImage (bundles Java 21),
 #  - the desktop app as an Arch Linux package (uses Arch's jre21-openjdk).
@@ -30,12 +30,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
-    env:
-      # Run numbers only grow, so each release installs as an update of the previous one.
-      VERSION_CODE: ${{ github.run_number }}
-      VERSION_NAME: 0.1.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v7
+
+      # The next number after the highest v0.1.N release, which is also the APK's version code, so
+      # each release installs as an update of the previous one. (Run numbers restart when the
+      # workflow file is renamed; release tags don't.)
+      - name: Pick version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh release list --limit 1000 --json tagName \
+            --jq '[.[].tagName | select(test("^v0\\.1\\.[0-9]+$")) | ltrimstr("v0.1.") | tonumber] | max // 0')
+          next=$((last + 1))
+          echo "VERSION_CODE=$next" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=0.1.$next" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v6
         with:
