@@ -1,121 +1,135 @@
-# Algofeed
+<p align="center">
+  <img src="assets/feed-icon.svg" alt="" width="96" />
+</p>
 
-A personal feed reader with a ranked home stream, inspired by [feedi](https://github.com/facundoolano/feedi). Built with Kotlin Multiplatform and Compose Multiplatform. Nearly all the code lives in `shared/`, used by a desktop app and an Android app (in progress).
+<h1 align="center">Algofeed</h1>
 
-## Run
+<p align="center">
+  <strong>A feed reader that ranks what you follow, for desktop and Android.</strong>
+</p>
 
-Requires a JDK (Gradle downloads JDK 21 for the build if needed).
+<p align="center">
+  <a href="https://github.com/Jean-Couscous/algofeed/actions/workflows/release.yml"><img alt="Release build" src="https://github.com/Jean-Couscous/algofeed/actions/workflows/release.yml/badge.svg?branch=main" /></a>
+  <a href="https://github.com/Jean-Couscous/algofeed/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Jean-Couscous/algofeed" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Jean-Couscous/algofeed" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Algofeed's Home stream on desktop, with entries from Hacker News, Lobsters and a blog" width="800" />
+</p>
+
+---
+
+Algofeed puts everything you subscribe to (blogs, Reddit, Hacker News, Mastodon, YouTube and more) in one Home stream. Instead of newest first, Home mixes freshness with what you actually read, and lets feeds that post rarely surface above busy ones, following [feedi](https://github.com/facundoolano/feedi)'s approach. Everything runs on your device: no account, no server, no tracking.
+
+## Features
+
+- **One ranked Home** — four weights you set in Settings: freshness, quiet feeds, feeds you engage with, topics you read. Each entry's info button shows why it ranks where it does.
+- **Learns from use** — opening, reading for 30 seconds, favoriting and bookmarking pull related entries up; "Show less like this" and scrolling past push them down.
+- **Many sources** — RSS, Atom and RDF; Reddit subreddits and public custom feeds; Hacker News; Kagi News; Lobsters; Mastodon accounts and hashtags; YouTube channels.
+- **Reader view** — articles extracted to clean text, comment threads for Hacker News and Reddit, and image posts shown as images.
+- **Hacker News account** — optional login to upvote, reply and comment from the reader.
+- **Android** — background refresh (optionally only on Wi-Fi or while charging), a home-screen widget, share-a-link-to-subscribe, wallpaper colors on Android 12+.
+- **Desktop** — keyboard shortcuts, Firefox-style smooth scrolling, middle-click autoscroll.
+- **Portable subscriptions** — OPML import and export.
+
+## Install
+
+Download from the [latest release](https://github.com/Jean-Couscous/algofeed/releases/latest).
+
+| Platform | File | Requirements |
+| --- | --- | --- |
+| Android | `algofeed-<version>.apk` | Android 8.0 or later |
+| Arch Linux | `algofeed-<version>-1-x86_64.pkg.tar.zst` | x86_64; uses Arch's `jre21-openjdk` |
+| Other Linux | `Algofeed-<version>-x86_64.AppImage` | x86_64; bundles its own Java |
 
 ```bash
-./gradlew :desktopApp:run                                  # start the app
-./gradlew :shared:desktopTest                              # tests
-./gradlew :desktopApp:packageDistributionForCurrentOS      # .deb / .rpm / AppImage
+# Android, from a computer with USB debugging enabled on the phone
+adb install algofeed-<version>.apk
+
+# Arch Linux (pulls in jre21-openjdk and adds Algofeed to the app menu)
+sudo pacman -U algofeed-<version>-1-x86_64.pkg.tar.zst
+
+# AppImage
+chmod +x Algofeed-<version>-x86_64.AppImage
+./Algofeed-<version>-x86_64.AppImage
 ```
 
-The database lives at `$XDG_DATA_HOME/algofeed/algofeed.db` (default `~/.local/share/algofeed/algofeed.db`). Set `ALGOFEED_DB` to use another file.
+On the phone itself, opening the APK works too; Android asks once to allow installs from the app you opened it with. There are no Windows or macOS builds; see [Build from source](#build-from-source).
 
-### Android
+## Usage
 
-Requires the Android SDK with platform 37, with its path in `local.properties` (`sdk.dir=…`) or `ANDROID_HOME`. The app targets API 36 and runs on Android 8.0 (API 26) and later.
+### Adding feeds
 
-```bash
-./gradlew :androidApp:assembleDebug
-adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-```
-
-Release builds are shrunk with R8:
-
-```bash
-./gradlew :androidApp:assembleRelease   # APK, androidApp/build/outputs/apk/release/
-./gradlew :androidApp:bundleRelease     # AAB for Play, androidApp/build/outputs/bundle/release/
-```
-
-Every push to `main` also builds, tests and publishes a GitHub release (`.github/workflows/release.yml`) with the signed APK and the desktop packages below. The release's version code is the workflow's run number, so each release installs as an update of the previous one. Local builds keep version code 1, so a local build can't be installed over a release build; uninstall first or pass `-Palgofeed.versionCode=N`.
-
-Without a signing key they're signed with the debug key, which is only good for testing on your own devices. To sign with an upload key, add its path, passwords and alias to `~/.gradle/gradle.properties` as `algofeed.release.storeFile`, `algofeed.release.storePassword`, `algofeed.release.keyAlias` and `algofeed.release.keyPassword` (see `androidApp/build.gradle.kts`). Keep `androidApp/build/outputs/mapping/release/mapping.txt` from every build you ship; crash stack traces can only be decoded with it.
-
-### Desktop packages
-
-Each [release](https://github.com/Jean-Couscous/algofeed/releases) has two Linux builds (x86_64):
-
-- **Arch Linux**: `sudo pacman -U algofeed-<version>-1-x86_64.pkg.tar.zst`. It uses Arch's `jre21-openjdk`, which pacman installs if needed, and adds Algofeed to the application menu.
-- **AppImage**, for any distribution: `chmod +x Algofeed-<version>-x86_64.AppImage`, then run it. It bundles its own Java.
-
-Both are built from `packaging/`: `appimage/build-appimage.sh` turns the Compose app image (`./gradlew :desktopApp:createDistributable`) into an AppImage, and `arch/PKGBUILD` packages the same app's jars for pacman.
-
-## Adding feeds
-
-"Add feed" accepts:
+"Add feed" in the sidebar accepts:
 
 | Input | Source |
 | --- | --- |
 | a site or feed URL | RSS, Atom or RDF; site pages are searched for a `<link rel="alternate">` feed |
-| `r/kotlin`, `reddit.com/r/kotlin/top`, `u/someone/m/feed` | Reddit listing or public custom feed (JSON, RSS fallback); links go to the submitted URL, the thread is the discussion link |
-| `hn`, an `hnrss.org` URL | Hacker News with discussion links |
-| `kagi`, `kagi:tech`, `kagi technology`, a `news.kagi.com` URL | Kagi News category (World by default); the reader shows Kagi's summary |
+| `r/kotlin`, `reddit.com/r/kotlin/top`, `u/someone/m/feed` | Reddit listing or public custom feed |
+| `hn`, an `hnrss.org` URL | Hacker News, with discussion links |
+| `kagi`, `kagi:tech`, `kagi technology`, a `news.kagi.com` URL | Kagi News category (World by default) |
 | `lobsters`, `lobste.rs/t/rust` | Lobsters front page or tag |
 | `@user@server`, `#tag@server`, `https://server/@user` | Mastodon account or hashtag |
 | `youtube.com/@handle`, `/channel/UC…` | YouTube channel |
 
-Hacker News stories show their comment thread under the article in the reader (from the Algolia HN API). Logging in under Settings > Hacker News account adds upvote buttons on stories and comments, replies, and a top-level comment box; favoriting an HN story in the app also favorites it on HN. HN has no write API, so this uses the website's own login form and links and can break when HN changes its pages. The session cookie is kept in the Android Keystore-encrypted store, or in the local database on desktop; the password isn't stored.
+Pasting a URL into the search box opens it in the reader without subscribing. On Android, sharing a link to Algofeed offers both. Each feed's edit dialog can make the reader always show the feed's own text instead of fetching the article page.
 
-On Android, the "Top entries" home-screen widget lists the three entries at the top of Home; tapping one opens it in the reader. It updates after each background refresh and when you leave the app. Settings > Appearance has "Use wallpaper colors" on Android 12 and later.
-
-Reddit posts show their comments under the post, read-only. Reddit often refuses its JSON API to apps without an account; the comments then come from the thread's RSS feed, which lists up to 100 comments without saying which one each replies to, so they appear as a flat list. Image posts show the image in the reader; galleries and videos show their preview with a link to the full post.
-
-Each feed's Edit dialog has "Always show the feed version in the reader", which skips fetching and extracting the article page.
-
-OPML import and export are in Settings. Pasting a URL into the search box opens it in the reader without subscribing.
-
-## Ordering
-
-Home has one ordering: a weighted sum whose weights are sliders in Settings.
-
-- **Freshness**: exponential decay over about 36 hours, plus a bonus inside 72 hours. Raise it to lean towards newest first.
-- **Quiet feeds**: feedi's frequency buckets (from monthly to more than 20 posts a day). Raise it to let rarely posting feeds rise above busy ones, as feedi does.
-- **Feeds you engage with**: a smoothed rate of opens and favorites against entries seen for that feed, minus hides.
-- **Topics you read**: similarity between the entry and an interest profile (TF-IDF over title and summary).
-
-The profile is learned from what you do: opening an entry, reading it for 30 seconds or more, favoriting and bookmarking move it toward that entry's terms; "Show less like this" and scrolling past without opening move it away. Weights decay by 2% a day. After scoring, a pass pushes down duplicate stories and spreads busy feeds out, so one source never fills more than two consecutive rows.
-
-The info button on each Home entry shows its score breakdown. Settings lists the terms the profile has learned and can reset them.
-
-## Keyboard
+### Keyboard (desktop)
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | next / previous entry |
-| `o`, `Enter` | open in reader |
-| `v` | open link in browser |
-| `c` | open discussion |
+| `o`, `Enter` | open in the reader |
+| `v` | open the link in the browser |
+| `c` | open the discussion |
 | `f` / `b` | favorite / bookmark |
 | `x` | show less like this |
 | `r` | check feeds now |
 | `/` | search |
-| `Esc` | close reader |
+| `Esc` | close the reader |
 
-Middle-click in the stream, reader or sidebar to autoscroll as in a browser: the view scrolls toward the pointer, faster the further away it is, until the next click. Holding the middle button and dragging scrolls until you let go.
+### Hacker News and Reddit
 
-On desktop the mouse wheel scrolls smoothly, the way Firefox does by default: three lines (57 px at 100%) per notch, animated over 200 ms for a single notch and down to 50 ms when notches come quickly, with each new notch continuing from the current speed. Shift+wheel scrolls sideways as before.
+- **Hacker News** threads load under the article. Logging in under Settings → Hacker News account adds upvote buttons, replies and a comment box, and favoriting an HN story in Algofeed also favorites it on HN. HN has no write API, so this drives the website's own login form and links, and can break when HN changes its pages. The password isn't stored.
+- **Reddit** comments are read-only. Reddit often refuses its API to apps without an account; comments then come from the thread's RSS feed, which doesn't say which comment replies to which, so they show as a flat list.
 
-## Layout
+### Data
 
+Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algofeed/algofeed.db` (by default `~/.local/share/algofeed/algofeed.db`); set `ALGOFEED_DB` to use another file. Settings → Subscriptions exports OPML, which carries your feeds and folders but not favorites, bookmarks or learned interests.
+
+## Build from source
+
+Requires a JDK 17 or later to run Gradle; the build downloads JDK 21 itself if needed. The Android app also needs the Android SDK with platform 37, its path set in `local.properties` (`sdk.dir=…`) or `ANDROID_HOME`.
+
+```bash
+git clone https://github.com/Jean-Couscous/algofeed.git
+cd algofeed
+
+# Desktop app
+./gradlew :desktopApp:run
+
+# Tests
+./gradlew :shared:desktopTest :androidApp:testDebugUnitTest :desktopApp:test
+
+# Android debug build, installed on a connected device
+./gradlew :androidApp:assembleDebug
+adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
-shared/src/commonMain/kotlin/algofeed/
-  data/     Room entities, DAOs, database
-  fetch/    source adapters (RSS, Reddit, HN, Kagi News, Lobsters, Mastodon, YouTube)
-  rank/     tokenizer, frequency buckets, ranker, profile learning
-  opml/     OPML import/export
-  reader/   readable-article extraction interface
-  ui/       Compose UI and view model
-shared/src/jvmSharedMain/  JVM and Android implementations (Readability4J)
-shared/src/desktopMain/    desktop actuals (RSS parser setup)
-shared/src/androidMain/    Android actuals
-desktopApp/                window, file dialogs, offscreen screenshot tool
-androidApp/                Activity, Storage Access Framework pickers, launcher icon
+
+Release builds are shrunk with R8 and signed with the debug key unless you set `algofeed.release.storeFile`, `algofeed.release.storePassword`, `algofeed.release.keyAlias` and `algofeed.release.keyPassword` in `~/.gradle/gradle.properties` (see `androidApp/build.gradle.kts`):
+
+```bash
+./gradlew :androidApp:assembleRelease
 ```
 
-`./gradlew :desktopApp:screenshot --args="<db> <out dir> [sources…]"` subscribes a scratch database to the given sources, prints the ranked stream with each score component, and renders the UI to PNG files at desktop and phone widths.
+The desktop packages come from `packaging/`: `appimage/build-appimage.sh` turns the Compose app image from `./gradlew :desktopApp:createDistributable` into an AppImage, and `arch/PKGBUILD` packages the same app for pacman. Every push to `main` runs `.github/workflows/release.yml`, which tests, builds all three packages and publishes them as release `v0.1.N`, one past the latest release; signing uses four repository secrets listed at the top of that file.
+
+Nearly all the code is shared Kotlin Multiplatform in `shared/` (storage, fetching, ranking and the Compose UI); `desktopApp/` and `androidApp/` are thin shells around it.
+
+## Status
+
+A personal project, actively developed, at version 0.1. There is no Play Store or F-Droid listing; releases on GitHub are the only distribution.
 
 ## Credits
 
@@ -123,4 +137,4 @@ Ordering and reading behavior follow [feedi](https://github.com/facundoolano/fee
 
 ## License
 
-Algofeed is under the [0BSD license](LICENSE): use, copy, modify and distribute it for any purpose, with or without credit. The fonts and the feed icon keep their own licenses, listed under Credits.
+[0BSD](LICENSE): use, copy, modify and distribute Algofeed for any purpose, with or without credit. The fonts and the feed icon keep their own licenses, listed under Credits.
