@@ -1,0 +1,27 @@
+package algofeed.ui
+
+/** Things the shared UI asks the host platform to do. */
+interface PlatformActions {
+    /** Lets the user choose an OPML file; returns its contents or null if cancelled. */
+    suspend fun pickOpml(): String?
+
+    /** Lets the user choose where to save [content]; returns false if cancelled. */
+    suspend fun saveOpml(content: String): Boolean
+}
+
+/** Touch-first host (phones, tablets): 48dp targets, pull to refresh, and on narrow screens horizontal swipes open and close the drawer. */
+val LocalTouchUi = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** A dialog window that covers the screen, drawing behind the system bars where the platform has them. */
+expect fun fullScreenDialogProperties(): androidx.compose.ui.window.DialogProperties
+
+/** Makes the status and navigation bar icons of the window this is composed in readable on the app's background. */
+@androidx.compose.runtime.Composable
+expect fun SystemBarIcons(darkTheme: Boolean)
+
+/** Whether [dynamicColorScheme] can return colors on this device. */
+expect val dynamicColorSupported: Boolean
+
+/** The system's wallpaper-based scheme (Android 12+), or null where there is none. */
+@androidx.compose.runtime.Composable
+expect fun dynamicColorScheme(dark: Boolean): androidx.compose.material3.ColorScheme?

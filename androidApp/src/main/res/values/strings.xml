@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Algofeed</string>
+    <string name="widget_name">Top entries</string>
+    <string name="widget_description">The three entries at the top of Home</string>
+</resources>

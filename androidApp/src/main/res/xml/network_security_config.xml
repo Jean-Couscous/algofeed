@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext is allowed everywhere because many feeds, and the images in them, are
+    still served over plain http:// and Android blocks cleartext by default. The cost
+    is that those requests can be read or altered on the network; https:// feeds are
+    unaffected.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
