@@ -16,8 +16,9 @@ android {
         applicationId = "algofeed.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI passes -Palgofeed.versionCode / -Palgofeed.versionName so each release can update the last one.
+        versionCode = providers.gradleProperty("algofeed.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("algofeed.versionName").orNull ?: "0.1.0"
     }
 
     // The upload key lives outside the repo. To use one, add to ~/.gradle/gradle.properties:

@@ -30,6 +30,8 @@ Release builds are shrunk with R8:
 ./gradlew :androidApp:bundleRelease     # AAB for Play, androidApp/build/outputs/bundle/release/
 ```
 
+Every push to `main` also builds, tests and publishes a signed APK as a GitHub release (`.github/workflows/android-release.yml`). The release's version code is the workflow's run number, so each release installs as an update of the previous one. Local builds keep version code 1, so a local build can't be installed over a release build; uninstall first or pass `-Palgofeed.versionCode=N`.
+
 Without a signing key they're signed with the debug key, which is only good for testing on your own devices. To sign with an upload key, add its path, passwords and alias to `~/.gradle/gradle.properties` as `algofeed.release.storeFile`, `algofeed.release.storePassword`, `algofeed.release.keyAlias` and `algofeed.release.keyPassword` (see `androidApp/build.gradle.kts`). Keep `androidApp/build/outputs/mapping/release/mapping.txt` from every build you ship; crash stack traces can only be decoded with it.
 
 ## Adding feeds
