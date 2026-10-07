@@ -9,8 +9,7 @@ pkgdesc="Ranked RSS reader"
 # The bundled Skia native library (skiko) is built for x86_64 only.
 arch=('x86_64')
 url="https://github.com/Jean-Couscous/algofeed"
-# No license has been chosen for Algofeed yet.
-license=('LicenseRef-none')
+license=('0BSD')
 depends=('jre21-openjdk')
 source=()
 

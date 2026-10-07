@@ -120,3 +120,7 @@ androidApp/                Activity, Storage Access Framework pickers, launcher 
 ## Credits
 
 Ordering and reading behavior follow [feedi](https://github.com/facundoolano/feedi) by Facundo Olano. Fonts: [Figtree](https://github.com/erikdkennedy/figtree) and [Literata](https://github.com/googlefonts/literata), both under the SIL Open Font License 1.1. The logo is the standard web feed icon, made for Mozilla Firefox and used under the Mozilla Public License 1.1; see `assets/README.md`.
+
+## License
+
+Algofeed is under the [0BSD license](LICENSE): use, copy, modify and distribute it for any purpose, with or without credit. The fonts and the feed icon keep their own licenses, listed under Credits.
