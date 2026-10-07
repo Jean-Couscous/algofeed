@@ -1,0 +1,153 @@
+# Every push to main: run the tests, then publish release v0.1.<run number> with
+#  - the signed Android APK,
+#  - the desktop app as an AppImage (bundles Java 21),
+#  - the desktop app as an Arch Linux package (uses Arch's jre21-openjdk).
+# Manual runs can instead attach desktop packages to an existing release (input attach_to).
+# Signing needs four repository secrets: ALGOFEED_KEYSTORE_BASE64 (the .jks file, base64),
+# ALGOFEED_STORE_PASSWORD, ALGOFEED_KEY_ALIAS and ALGOFEED_KEY_PASSWORD.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      attach_to:
+        description: Existing release tag (e.g. v0.1.1) to add desktop packages to; empty makes a new release
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  android:
+    if: inputs.attach_to == ''
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    env:
+      # Run numbers only grow, so each release installs as an update of the previous one.
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Test
+        run: ./gradlew :shared:desktopTest :androidApp:testDebugUnitTest :desktopApp:test
+
+      - name: Build signed APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ALGOFEED_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ALGOFEED_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ALGOFEED_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ALGOFEED_KEY_PASSWORD }}
+        run: |
+          keystore="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$keystore"
+          ./gradlew :androidApp:assembleRelease \
+            -Palgofeed.versionCode="$VERSION_CODE" -Palgofeed.versionName="$VERSION_NAME" \
+            -Palgofeed.release.storeFile="$keystore" -Palgofeed.release.storePassword="$STORE_PASSWORD" \
+            -Palgofeed.release.keyAlias="$KEY_ALIAS" -Palgofeed.release.keyPassword="$KEY_PASSWORD"
+          rm -f "$keystore"
+          mv androidApp/build/outputs/apk/release/androidApp-release.apk "algofeed-$VERSION_NAME.apk"
+
+      # Without the mapping file, crash stack traces from this build can't be decoded.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mapping-${{ env.VERSION_NAME }}
+          path: androidApp/build/outputs/mapping/release/mapping.txt
+          retention-days: 90
+
+      - name: Publish release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION_NAME" "algofeed-$VERSION_NAME.apk" \
+            --target "$GITHUB_SHA" --title "Algofeed $VERSION_NAME" \
+            --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
+          echo "tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: android
+    # Runs after a new Android release, or alone when attaching to an existing one.
+    if: always() && (needs.android.result == 'success' || inputs.attach_to != '')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        env:
+          TAG: ${{ inputs.attach_to || needs.android.outputs.tag }}
+        run: |
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build app image
+        run: ./gradlew :desktopApp:createDistributable -Palgofeed.versionName="$VERSION_NAME"
+
+      - name: Build and publish AppImage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          packaging/appimage/build-appimage.sh desktopApp/build/compose/binaries/main/app/algofeed "$VERSION_NAME"
+          gh release upload "$TAG" "Algofeed-$VERSION_NAME-x86_64.AppImage" --clobber
+
+      # The pacman job runs in an Arch container; hand it the app's files.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-app
+          path: desktopApp/build/compose/binaries/main/app/algofeed/lib/app/
+          include-hidden-files: true
+          retention-days: 1
+
+  pacman:
+    needs: desktop
+    if: always() && needs.desktop.result == 'success'
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed base-devel git github-cli
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: desktop-app
+          path: packaging/arch/app
+
+      - name: Build and publish package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.desktop.outputs.tag }}
+        run: |
+          version="${TAG#v}"
+          # makepkg refuses to run as root.
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && ALGOFEED_VERSION='$version' makepkg -d --noconfirm"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gh release upload "$TAG" packaging/arch/algofeed-"$version"-1-x86_64.pkg.tar.zst --clobber --repo "$GITHUB_REPOSITORY"

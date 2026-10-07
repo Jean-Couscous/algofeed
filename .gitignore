@@ -5,3 +5,7 @@ local.properties
 .idea/
 *.iml
 release-build/
+
+# Inputs and outputs of packaging/arch/PKGBUILD
+packaging/arch/app/
+*.pkg.tar.zst

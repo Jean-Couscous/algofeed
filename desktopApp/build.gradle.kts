@@ -21,10 +21,17 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "algofeed.desktop.MainKt"
+        // Package with the Java 21 the app is compiled and tested against, not whichever JDK runs Gradle.
+        javaHome = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+            .get().metadata.installationPath.asFile.absolutePath
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "algofeed"
-            packageVersion = "0.1.0"
+            // CI passes -Palgofeed.versionName so desktop packages carry the release's version.
+            packageVersion = providers.gradleProperty("algofeed.versionName").orNull ?: "0.1.0"
+            // From suggestRuntimeModules, plus jdk.crypto.ec: HTTPS key exchange on Java 21 needs it,
+            // and it is loaded as a provider, which the scan can't see.
+            modules("java.instrument", "java.management", "jdk.unsupported", "jdk.crypto.ec")
             linux {
                 iconFile = project.file("icon.png")
             }

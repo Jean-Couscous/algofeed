@@ -30,9 +30,18 @@ Release builds are shrunk with R8:
 ./gradlew :androidApp:bundleRelease     # AAB for Play, androidApp/build/outputs/bundle/release/
 ```
 
-Every push to `main` also builds, tests and publishes a signed APK as a GitHub release (`.github/workflows/android-release.yml`). The release's version code is the workflow's run number, so each release installs as an update of the previous one. Local builds keep version code 1, so a local build can't be installed over a release build; uninstall first or pass `-Palgofeed.versionCode=N`.
+Every push to `main` also builds, tests and publishes a GitHub release (`.github/workflows/release.yml`) with the signed APK and the desktop packages below. The release's version code is the workflow's run number, so each release installs as an update of the previous one. Local builds keep version code 1, so a local build can't be installed over a release build; uninstall first or pass `-Palgofeed.versionCode=N`.
 
 Without a signing key they're signed with the debug key, which is only good for testing on your own devices. To sign with an upload key, add its path, passwords and alias to `~/.gradle/gradle.properties` as `algofeed.release.storeFile`, `algofeed.release.storePassword`, `algofeed.release.keyAlias` and `algofeed.release.keyPassword` (see `androidApp/build.gradle.kts`). Keep `androidApp/build/outputs/mapping/release/mapping.txt` from every build you ship; crash stack traces can only be decoded with it.
+
+### Desktop packages
+
+Each [release](https://github.com/Jean-Couscous/algofeed/releases) has two Linux builds (x86_64):
+
+- **Arch Linux**: `sudo pacman -U algofeed-<version>-1-x86_64.pkg.tar.zst`. It uses Arch's `jre21-openjdk`, which pacman installs if needed, and adds Algofeed to the application menu.
+- **AppImage**, for any distribution: `chmod +x Algofeed-<version>-x86_64.AppImage`, then run it. It bundles its own Java.
+
+Both are built from `packaging/`: `appimage/build-appimage.sh` turns the Compose app image (`./gradlew :desktopApp:createDistributable`) into an AppImage, and `arch/PKGBUILD` packages the same app's jars for pacman.
 
 ## Adding feeds
 

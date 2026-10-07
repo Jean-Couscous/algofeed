@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Algofeed
+Comment=Ranked RSS reader
+Exec=algofeed %U
+Icon=algofeed
+Categories=Network;News;
+Terminal=false

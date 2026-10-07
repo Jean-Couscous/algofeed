@@ -1,0 +1,36 @@
+# Builds the pacman package from the app's jars; Java comes from Arch's jre21-openjdk.
+# Before makepkg, copy the contents of the Compose app image's lib/app/ (jars, the Skia
+# native library and resources) into ./app/ and set ALGOFEED_VERSION, e.g.
+# ALGOFEED_VERSION=0.1.2 makepkg.
+pkgname=algofeed
+pkgver=${ALGOFEED_VERSION:-0.1.0}
+pkgrel=1
+pkgdesc="Ranked RSS reader"
+# The bundled Skia native library (skiko) is built for x86_64 only.
+arch=('x86_64')
+url="https://github.com/Jean-Couscous/algofeed"
+# No license has been chosen for Algofeed yet.
+license=('LicenseRef-none')
+depends=('jre21-openjdk')
+source=()
+
+package() {
+    # The jars sit with the Skia native library, so the whole app lives under /usr/lib.
+    install -dm755 "$pkgdir/usr/lib/$pkgname"
+    cp -r --no-preserve=ownership "$startdir"/app/. "$pkgdir/usr/lib/$pkgname/"
+    rm -f "$pkgdir/usr/lib/$pkgname/$pkgname.cfg" "$pkgdir/usr/lib/$pkgname/.jpackage.xml"
+
+    # The same options the Compose app image's launcher passes (see lib/app/algofeed.cfg there).
+    install -Dm755 /dev/stdin "$pkgdir/usr/bin/$pkgname" <<'LAUNCHER'
+#!/bin/sh
+dir=/usr/lib/algofeed
+exec /usr/lib/jvm/java-21-openjdk/bin/java \
+    -Dskiko.library.path="$dir" \
+    -Dcompose.application.resources.dir="$dir/resources" \
+    -Dcompose.application.configure.swing.globals=true \
+    -cp "$dir/*" algofeed.desktop.MainKt "$@"
+LAUNCHER
+
+    install -Dm644 "$startdir/../linux/algofeed.desktop" "$pkgdir/usr/share/applications/$pkgname.desktop"
+    install -Dm644 "$startdir/../../desktopApp/icon.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/$pkgname.png"
+}
