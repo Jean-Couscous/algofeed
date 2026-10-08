@@ -1,2 +1,2 @@
-- Inline video plays on Android only; desktop still opens Reddit/4chan videos in the browser (avoids a system media stack dependency — GStreamer/mpv/VLC)
-- MangaDex followed feed and inline video are built but not yet verified on a device; see PLAN.md
+- Image and video viewer inside app. Classic popup on click.
+- Media tab in sidebar
