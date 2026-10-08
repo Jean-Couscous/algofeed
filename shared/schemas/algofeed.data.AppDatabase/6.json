@@ -1,0 +1,447 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "b07e2b151a3f4571706fa3a50cbdcf24",
+    "entities": [
+      {
+        "tableName": "folder",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "feed",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `folderId` INTEGER, `type` TEXT NOT NULL, `url` TEXT NOT NULL, `title` TEXT NOT NULL, `siteUrl` TEXT, `iconUrl` TEXT, `bucket` INTEGER NOT NULL, `lastFetch` INTEGER, `lastError` TEXT, `etag` TEXT, `lastModified` TEXT, `enabled` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `impressions` INTEGER NOT NULL, `opens` INTEGER NOT NULL, `favorites` INTEGER NOT NULL, `dismissals` INTEGER NOT NULL, `preferFeedVersion` INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(`folderId`) REFERENCES `folder`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "folderId",
+            "columnName": "folderId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "siteUrl",
+            "columnName": "siteUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "iconUrl",
+            "columnName": "iconUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bucket",
+            "columnName": "bucket",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastFetch",
+            "columnName": "lastFetch",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "etag",
+            "columnName": "etag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "lastModified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "impressions",
+            "columnName": "impressions",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "opens",
+            "columnName": "opens",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "favorites",
+            "columnName": "favorites",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dismissals",
+            "columnName": "dismissals",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "preferFeedVersion",
+            "columnName": "preferFeedVersion",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_feed_url",
+            "unique": true,
+            "columnNames": [
+              "url"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_feed_url` ON `${TABLE_NAME}` (`url`)"
+          },
+          {
+            "name": "index_feed_folderId",
+            "unique": false,
+            "columnNames": [
+              "folderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_feed_folderId` ON `${TABLE_NAME}` (`folderId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "folder",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "folderId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `feedId` INTEGER NOT NULL, `remoteId` TEXT NOT NULL, `url` TEXT, `commentsUrl` TEXT, `title` TEXT, `author` TEXT, `summaryHtml` TEXT, `contentHtml` TEXT, `thumbnailUrl` TEXT, `media` TEXT NOT NULL DEFAULT '[]', `sortDate` INTEGER NOT NULL, `fetchedAt` INTEGER NOT NULL, `viewedAt` INTEGER, `openedAt` INTEGER, `readSeconds` INTEGER NOT NULL, `bookmarkedAt` INTEGER, `favoritedAt` INTEGER, `dismissedAt` INTEGER, `extractedHtml` TEXT, FOREIGN KEY(`feedId`) REFERENCES `feed`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "feedId",
+            "columnName": "feedId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "commentsUrl",
+            "columnName": "commentsUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "author",
+            "columnName": "author",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "summaryHtml",
+            "columnName": "summaryHtml",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentHtml",
+            "columnName": "contentHtml",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "thumbnailUrl",
+            "columnName": "thumbnailUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "media",
+            "columnName": "media",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "sortDate",
+            "columnName": "sortDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fetchedAt",
+            "columnName": "fetchedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "viewedAt",
+            "columnName": "viewedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "openedAt",
+            "columnName": "openedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "readSeconds",
+            "columnName": "readSeconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bookmarkedAt",
+            "columnName": "bookmarkedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "favoritedAt",
+            "columnName": "favoritedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dismissedAt",
+            "columnName": "dismissedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "extractedHtml",
+            "columnName": "extractedHtml",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_entry_feedId_remoteId",
+            "unique": true,
+            "columnNames": [
+              "feedId",
+              "remoteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_entry_feedId_remoteId` ON `${TABLE_NAME}` (`feedId`, `remoteId`)"
+          },
+          {
+            "name": "index_entry_sortDate",
+            "unique": false,
+            "columnNames": [
+              "sortDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entry_sortDate` ON `${TABLE_NAME}` (`sortDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "feed",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "feedId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "entry_term",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`entryId` INTEGER NOT NULL, `term` TEXT NOT NULL, `tf` REAL NOT NULL, PRIMARY KEY(`entryId`, `term`), FOREIGN KEY(`entryId`) REFERENCES `entry`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "entryId",
+            "columnName": "entryId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "term",
+            "columnName": "term",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tf",
+            "columnName": "tf",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "entryId",
+            "term"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_entry_term_term",
+            "unique": false,
+            "columnNames": [
+              "term"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entry_term_term` ON `${TABLE_NAME}` (`term`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "entry",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "entryId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "profile_term",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`term` TEXT NOT NULL, `weight` REAL NOT NULL, PRIMARY KEY(`term`))",
+        "fields": [
+          {
+            "fieldPath": "term",
+            "columnName": "term",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weight",
+            "columnName": "weight",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "term"
+          ]
+        }
+      },
+      {
+        "tableName": "setting",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b07e2b151a3f4571706fa3a50cbdcf24')"
+    ]
+  }
+}

@@ -20,10 +20,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,16 +39,19 @@ data class ReaderState(
     val showingFeedVersion: Boolean = false,
     val loading: Boolean = false,
     val error: String? = null,
-    /** The discussion thread, for Hacker News stories and Reddit posts. */
+    /** The discussion thread, for Hacker News stories. */
     val comments: CommentsState? = null,
 ) {
     val open get() = entry != null || url != null
 }
 
-enum class CommentSource(val siteName: String) { HackerNews("HN"), Reddit("Reddit") }
+enum class CommentSource(val siteName: String) { HackerNews("HN") }
+
+/** Feed types whose entries carry everything to show; the reader renders them without extracting an article. */
+private val SELF_CONTAINED = setOf("mastodon", "kagi", "bluesky", "4chan", "tumblr", "mangadex")
 
 data class CommentsState(
-    /** The HN item id, or the Reddit post id read as base 36. */
+    /** The HN item id. */
     val storyId: Long,
     val source: CommentSource,
     /** The thread's web page. */
@@ -102,6 +107,10 @@ class AlgofeedViewModel(
     private var autoRefreshJob: Job? = null
     private var loadedAt = 0L
 
+    /** The last settings written to disk, for diffing what changed when debounced writes land. */
+    private var savedSettings = Settings()
+    private val settingsWrites = MutableSharedFlow<Settings>(extraBufferCapacity = 64)
+
     val settingsOptions = SettingsOptions(
         minRefreshMinutes = background?.minIntervalMinutes ?: 5,
         refreshConstraints = background != null,
@@ -109,10 +118,28 @@ class AlgofeedViewModel(
 
     init {
         viewModelScope.launch {
-            _state.update { it.copy(settings = repo.settings(), hnUser = repo.hnUser()) }
+            val loaded = repo.settings()
+            savedSettings = loaded
+            _state.update { it.copy(settings = loaded, hnUser = repo.hnUser()) }
             reload()
             refresh(reloadAfter = true)
             scheduleAutoRefresh()
+        }
+        // Settings apply to the UI the instant they change; persisting and re-ranking are debounced
+        // so dragging a slider doesn't hammer the database or re-rank on every frame.
+        viewModelScope.launch {
+            settingsWrites.debounce(300L).collect { settings ->
+                val old = savedSettings
+                savedSettings = settings
+                repo.saveSettings(settings)
+                val scheduling = settings.copy(
+                    refreshMinutes = old.refreshMinutes,
+                    refreshUnmeteredOnly = old.refreshUnmeteredOnly,
+                    refreshWhileChargingOnly = old.refreshWhileChargingOnly,
+                )
+                if (scheduling != settings) scheduleAutoRefresh()
+                if (scheduling.copy(theme = old.theme, dynamicColor = old.dynamicColor) != old) reload()
+            }
         }
     }
 
@@ -306,7 +333,7 @@ class AlgofeedViewModel(
         val feed = feeds.value.firstOrNull { it.id == entry.feedId }
         val feedHtml = entry.contentHtml ?: entry.summaryHtml
         // Short posts (toots, self posts), feeds that ship full articles and feeds set to it are shown as-is.
-        val feedIsEnough = feed?.type == "mastodon" || (feed?.preferFeedVersion == true && feedHtml != null) || feed?.type == "kagi" || entry.url == null ||
+        val feedIsEnough = feed?.type in SELF_CONTAINED || (feed?.preferFeedVersion == true && feedHtml != null) || entry.url == null ||
             (entry.extractedHtml == null && Html.toText(entry.contentHtml).length > 1500) ||
             (feed?.type == "reddit" && entry.url == entry.commentsUrl) ||
             // Image, gallery and video posts: the reader shows the picture; there is no article to extract.
@@ -319,7 +346,7 @@ class AlgofeedViewModel(
                     article = if (feedIsEnough) Article(entry.title, entry.author, feedHtml.orEmpty()) else null,
                     showingFeedVersion = feedIsEnough,
                     loading = !feedIsEnough,
-                    comments = commentsFor(entry, feed),
+                    comments = commentsFor(entry),
                 ),
             )
         }
@@ -356,12 +383,9 @@ class AlgofeedViewModel(
 
     // --- comments and Hacker News
 
-    private fun commentsFor(entry: Entry, feed: Feed?): CommentsState? {
+    private fun commentsFor(entry: Entry): CommentsState? {
         val url = entry.commentsUrl ?: return null
         HackerNews.itemId(url)?.takeIf { repo.hasHackerNews }?.let { return CommentsState(it, CommentSource.HackerNews, url) }
-        if (feed?.type == "reddit") {
-            Repository.redditPostId(url)?.let { return CommentsState(it, CommentSource.Reddit, url) }
-        }
         return null
     }
 
@@ -370,12 +394,7 @@ class AlgofeedViewModel(
         commentsJob?.cancel()
         commentsJob = viewModelScope.launch {
             _state.update { it.copy(reader = it.reader.copy(comments = comments.copy(loading = true, error = null))) }
-            val result = runCatchingCancellable {
-                when (comments.source) {
-                    CommentSource.HackerNews -> repo.hnThread(comments.storyId)
-                    CommentSource.Reddit -> repo.redditThread(comments.threadUrl)
-                }
-            }
+            val result = runCatchingCancellable { repo.hnThread(comments.storyId) }
             _state.update { s ->
                 if (s.reader.comments?.storyId != comments.storyId) return@update s
                 s.copy(
@@ -505,18 +524,14 @@ class AlgofeedViewModel(
     // --- settings
 
     fun saveSettings(settings: Settings) {
-        val old = _state.value.settings
         _state.update { it.copy(settings = settings) }
-        viewModelScope.launch {
-            repo.saveSettings(settings)
-            val scheduling = settings.copy(
-                refreshMinutes = old.refreshMinutes,
-                refreshUnmeteredOnly = old.refreshUnmeteredOnly,
-                refreshWhileChargingOnly = old.refreshWhileChargingOnly,
-            )
-            if (scheduling != settings) scheduleAutoRefresh()
-            if (scheduling.copy(theme = old.theme, dynamicColor = old.dynamicColor) != old) reload()
-        }
+        settingsWrites.tryEmit(settings)
+    }
+
+    suspend fun sourceKey(key: String): String? = repo.secret(key)
+
+    fun setSourceKey(key: String, value: String) {
+        viewModelScope.launch { repo.setSecret(key, value) }
     }
 
     /** Strongest learned likes and dislikes, as word stems. */
@@ -561,6 +576,29 @@ class AlgofeedViewModel(
         viewModelScope.launch {
             val saved = platform.saveOpml(repo.exportOpml())
             if (saved) notify("Subscriptions exported")
+        }
+    }
+
+    fun exportBackup(platform: PlatformActions) {
+        viewModelScope.launch {
+            val saved = platform.saveBackup("algofeed-backup.json", repo.exportBackup())
+            if (saved) notify("Backup saved")
+        }
+    }
+
+    fun importBackup(platform: PlatformActions) {
+        viewModelScope.launch {
+            val raw = platform.pickBackup() ?: return@launch
+            showProgress("Restoring backup", 0, 1)
+            val result = runCatchingCancellable { repo.importBackup(raw) }
+            _state.update { it.copy(progress = null) }
+            result.onSuccess {
+                val restored = repo.settings()
+                savedSettings = restored
+                _state.update { s -> s.copy(settings = restored) }
+                notify("Restored backup, added $it feeds")
+                reload()
+            }.onFailure { notify("Restore failed: ${it.message}") }
         }
     }
 

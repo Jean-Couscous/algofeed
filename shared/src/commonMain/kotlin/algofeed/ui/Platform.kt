@@ -7,6 +7,12 @@ interface PlatformActions {
 
     /** Lets the user choose where to save [content]; returns false if cancelled. */
     suspend fun saveOpml(content: String): Boolean
+
+    /** Lets the user choose a backup file to import; returns its contents or null if cancelled. */
+    suspend fun pickBackup(): String? = null
+
+    /** Lets the user save a backup named [suggestedName]; returns false if cancelled. */
+    suspend fun saveBackup(suggestedName: String, content: String): Boolean = false
 }
 
 /** Touch-first host (phones, tablets): 48dp targets, pull to refresh, and on narrow screens horizontal swipes open and close the drawer. */

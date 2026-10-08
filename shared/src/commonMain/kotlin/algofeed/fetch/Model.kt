@@ -1,6 +1,7 @@
 package algofeed.fetch
 
 import algofeed.data.Feed
+import algofeed.data.MediaItem
 
 data class FeedInfo(
     val type: String,
@@ -20,6 +21,7 @@ data class EntryDraft(
     val summaryHtml: String? = null,
     val contentHtml: String? = null,
     val thumbnailUrl: String? = null,
+    val media: List<MediaItem> = emptyList(),
 )
 
 sealed interface FetchResult {

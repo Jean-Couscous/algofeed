@@ -13,7 +13,6 @@ import algofeed.fetch.FetchResult
 import algofeed.fetch.HackerNews
 import algofeed.fetch.HackerNewsException
 import algofeed.fetch.HnItemPage
-import algofeed.fetch.RedditAdapter
 import algofeed.fetch.CommentThread
 import algofeed.fetch.Sources
 import algofeed.opml.Opml
@@ -106,6 +105,14 @@ class Repository(
 
     suspend fun hnUser(): String? = hnSession()?.let(HackerNews::userOf)
 
+    /** A user-provided secret (API key, token): in [secrets] when there is a store, else the settings table. */
+    suspend fun secret(key: String): String? =
+        if (secrets != null) secrets.secret(key) else db.settings().get(key)?.ifBlank { null }
+
+    suspend fun setSecret(key: String, value: String) {
+        if (secrets != null) secrets.setSecret(key, value) else db.settings().put(Setting(key, value.trim()))
+    }
+
     suspend fun hnLogin(user: String, password: String): String {
         val hn = hackerNews ?: error("Hacker News isn't available")
         setHnSession(hn.login(user.trim(), password))
@@ -115,11 +122,6 @@ class Repository(
     suspend fun hnLogout() = setHnSession("")
 
     suspend fun hnThread(itemId: Long): CommentThread = hackerNews!!.thread(itemId, hnSession())
-
-    /** Read-only Reddit comments; see [RedditAdapter.thread]. */
-    suspend fun redditThread(postUrl: String): CommentThread =
-        sources.adapters.filterIsInstance<RedditAdapter>().firstOrNull()?.thread(postUrl)
-            ?: throw FetchException("Reddit isn't available")
 
     private suspend fun requireHnSession() = hnSession() ?: throw HackerNewsException("Log in to Hacker News in Settings first")
 
@@ -249,6 +251,7 @@ class Repository(
                 summaryHtml = it.summaryHtml,
                 contentHtml = it.contentHtml,
                 thumbnailUrl = it.thumbnailUrl,
+                media = algofeed.data.MediaCodec.encode(it.media),
                 sortDate = it.sortDate,
                 fetchedAt = now,
             )
@@ -455,15 +458,58 @@ class Repository(
                 results.mapNotNull { (url, r) -> r.exceptionOrNull()?.let { url to (it.message ?: it.toString()) } }.toMap()
         }
 
+    // --- backup
+
+    /** A portable snapshot of subscriptions, settings and learned ranking as JSON. */
+    suspend fun exportBackup(): String {
+        val folders = db.folders().all()
+        val nameOf = folders.associate { it.id to it.name }
+        val backup = Backup(
+            settings = settings(),
+            folders = folders.map { BackupFolder(it.name) },
+            feeds = db.feeds().all().map { f ->
+                BackupFeed(
+                    type = f.type, url = f.url, title = f.title, siteUrl = f.siteUrl, iconUrl = f.iconUrl,
+                    folder = f.folderId?.let(nameOf::get), bucket = f.bucket,
+                    impressions = f.impressions, opens = f.opens, favorites = f.favorites, dismissals = f.dismissals,
+                    preferFeedVersion = f.preferFeedVersion,
+                )
+            },
+            profile = profile(),
+        )
+        return json.encodeToString(Backup.serializer(), backup)
+    }
+
+    /** Restores a [exportBackup] snapshot, merging into whatever is already here. Returns feeds added. */
+    suspend fun importBackup(raw: String): Int {
+        val backup = json.decodeFromString(Backup.serializer(), raw)
+        saveSettings(backup.settings)
+        val folderIds = backup.folders.associate { it.name to createFolder(it.name).id }
+        var added = 0
+        for (bf in backup.feeds) {
+            if (db.feeds().byUrl(bf.url) != null) continue
+            val feed = Feed(
+                folderId = bf.folder?.let(folderIds::get),
+                type = bf.type, url = bf.url, title = bf.title, siteUrl = bf.siteUrl, iconUrl = bf.iconUrl,
+                bucket = bf.bucket, impressions = bf.impressions, opens = bf.opens, favorites = bf.favorites,
+                dismissals = bf.dismissals, preferFeedVersion = bf.preferFeedVersion, createdAt = clock(),
+            )
+            val saved = feed.copy(id = db.feeds().insert(feed))
+            runCatchingCancellable { refreshFeed(saved) }
+            added++
+        }
+        if (backup.profile.isNotEmpty()) profileMutex.withLock {
+            db.profile().upsert(backup.profile.map { ProfileTerm(it.key, it.value) })
+            profileCache = null
+        }
+        return added
+    }
+
     /** Unseen entries stored since [since], including ones a background refresh added. */
     suspend fun countFetchedSince(since: Long): Int = db.entries().countFetchedSince(since)
 
     companion object {
         private const val SETTINGS_KEY = "settings"
-        private val redditPost = Regex("""reddit\.com/r/[^/]+/comments/([a-z0-9]+)""")
-
-        /** The id of a Reddit post from its thread URL, read as a base-36 number. */
-        fun redditPostId(url: String): Long? = redditPost.find(url)?.groupValues?.get(1)?.toLongOrNull(36)
         private const val DECAY_KEY = "profile.lastDecay"
         private const val HN_SESSION_KEY = "hn.session"
         const val LONG_READ_SECONDS = 30

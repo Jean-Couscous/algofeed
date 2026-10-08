@@ -62,6 +62,8 @@ data class Entry(
     val summaryHtml: String? = null,
     val contentHtml: String? = null,
     val thumbnailUrl: String? = null,
+    /** A JSON array of [MediaItem]; use [MediaCodec] to read it. "[]" when the entry has no gallery. */
+    @ColumnInfo(defaultValue = "[]") val media: String = "[]",
     val sortDate: Long,
     val fetchedAt: Long,
     val viewedAt: Long? = null,

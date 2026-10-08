@@ -1,5 +1,6 @@
 package algofeed.ui
 
+import algofeed.SecretStore
 import algofeed.Settings
 import algofeed.ThemeMode
 import algofeed.data.Feed
@@ -81,7 +82,7 @@ fun AddFeedDialog(
         confirmButton = { TextButton(onClick = ::submit, enabled = input.isNotBlank() && !busy) { Text(if (busy) "Adding…" else "Subscribe") } },
     ) {
         Text(
-            "Paste a site or feed URL, a subreddit (r/kotlin) or custom feed (u/name/m/feed), a Mastodon account (@user@server), a YouTube channel, a Kagi News category (kagi:tech), or type hn or lobsters.",
+            "Paste a site or feed URL, a subreddit (r/kotlin) or custom feed (u/name/m/feed), a Mastodon account (@user@server), a Bluesky account (@name.bsky.social), a Tumblr blog (staff.tumblr.com), a 4chan board (4chan:g), a MangaDex title URL, a YouTube channel, a Kagi News category (kagi:tech), or type hn or lobsters.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -101,6 +102,7 @@ private fun FormDialog(
     title: String,
     onDismiss: () -> Unit,
     confirmButton: @Composable () -> Unit,
+    dismissButton: (@Composable () -> Unit)? = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -113,7 +115,7 @@ private fun FormDialog(
                 Column(Modifier.heightIn(max = 560.dp).mouseScrolling(scroll).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             },
             confirmButton = confirmButton,
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+            dismissButton = dismissButton,
         )
         return
     }
@@ -232,6 +234,33 @@ data class SettingsOptions(
     val refreshConstraints: Boolean = false,
 )
 
+/** Reads and writes user-provided source API keys (e.g. Tumblr) for the Settings dialog. */
+class SourceKeyActions(
+    val get: suspend (key: String) -> String?,
+    val set: (key: String, value: String) -> Unit,
+)
+
+@Composable
+private fun SourceKeysSection(actions: SourceKeyActions) {
+    Section("Source keys")
+    Text(
+        "Following Tumblr blogs needs a Tumblr API key — an OAuth consumer key from tumblr.com/oauth/apps. It is kept on this device only.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    var key by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { key = actions.get(SecretStore.TUMBLR_API_KEY) ?: "" }
+    key?.let { current ->
+        OutlinedTextField(
+            current,
+            { actions.set(SecretStore.TUMBLR_API_KEY, it); key = it },
+            label = { Text("Tumblr API key") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 /** Hacker News login for the Settings dialog. */
 class HnAccountActions(
     val user: String?,
@@ -292,11 +321,13 @@ fun SettingsDialog(
     onResetInterests: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
+    onImportBackup: () -> Unit,
+    onExportBackup: () -> Unit,
     onRemoveAllAndReset: suspend () -> Unit,
     hn: HnAccountActions?,
+    sourceKeys: SourceKeyActions,
     onDismiss: () -> Unit,
 ) {
-    var s by remember { mutableStateOf(settings) }
     var confirmReset by remember { mutableStateOf(false) }
     var interests by remember { mutableStateOf<Pair<List<Pair<String, Double>>, List<Pair<String, Double>>>?>(null) }
     LaunchedEffect(Unit) { interests = loadInterests() }
@@ -304,7 +335,9 @@ fun SettingsDialog(
     FormDialog(
         title = "Settings",
         onDismiss = onDismiss,
-        confirmButton = { TextButton(onClick = { onSave(s); onDismiss() }) { Text("Save") } },
+        // Changes apply as they are made, so the only button closes the dialog.
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = null,
     ) {
         Section("Home ordering")
         Text(
@@ -313,28 +346,28 @@ fun SettingsDialog(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val w = s.weights
-        WeightSlider("Freshness", w.recency) { s = s.copy(weights = w.copy(recency = it)) }
-        WeightSlider("Quiet feeds", w.rarity) { s = s.copy(weights = w.copy(rarity = it)) }
-        WeightSlider("Feeds you engage with", w.source) { s = s.copy(weights = w.copy(source = it)) }
-        WeightSlider("Topics you read", w.content) { s = s.copy(weights = w.copy(content = it)) }
-        TextButton(onClick = { s = s.copy(weights = algofeed.rank.Weights()) }) { Text("Reset to defaults") }
-        LabeledSwitch("Show entries already scrolled past", s.includeSeen) { s = s.copy(includeSeen = it) }
+        val w = settings.weights
+        WeightSlider("Freshness", w.recency) { onSave(settings.copy(weights = w.copy(recency = it))) }
+        WeightSlider("Quiet feeds", w.rarity) { onSave(settings.copy(weights = w.copy(rarity = it))) }
+        WeightSlider("Feeds you engage with", w.source) { onSave(settings.copy(weights = w.copy(source = it))) }
+        WeightSlider("Topics you read", w.content) { onSave(settings.copy(weights = w.copy(content = it))) }
+        TextButton(onClick = { onSave(settings.copy(weights = algofeed.rank.Weights())) }) { Text("Reset to defaults") }
+        LabeledSwitch("Show entries already scrolled past", settings.includeSeen) { onSave(settings.copy(includeSeen = it)) }
 
         HorizontalDivider()
         Section("Updates")
         val minRefresh = options.minRefreshMinutes
-        IntSlider("Check feeds every", s.refreshMinutes.coerceAtLeast(minRefresh), minRefresh..180, "min") { s = s.copy(refreshMinutes = it) }
+        IntSlider("Check feeds every", settings.refreshMinutes.coerceAtLeast(minRefresh), minRefresh..180, "min") { onSave(settings.copy(refreshMinutes = it)) }
         if (options.refreshConstraints) {
-            LabeledSwitch("In the background, only on Wi-Fi", s.refreshUnmeteredOnly) { s = s.copy(refreshUnmeteredOnly = it) }
-            LabeledSwitch("In the background, only while charging", s.refreshWhileChargingOnly) { s = s.copy(refreshWhileChargingOnly = it) }
+            LabeledSwitch("In the background, only on Wi-Fi", settings.refreshUnmeteredOnly) { onSave(settings.copy(refreshUnmeteredOnly = it)) }
+            LabeledSwitch("In the background, only while charging", settings.refreshWhileChargingOnly) { onSave(settings.copy(refreshWhileChargingOnly = it)) }
         }
-        IntSlider("Keep entries for", s.retentionDays, 7..90, "days") { s = s.copy(retentionDays = it) }
+        IntSlider("Keep entries for", settings.retentionDays, 7..90, "days") { onSave(settings.copy(retentionDays = it)) }
 
         HorizontalDivider()
         Section("Appearance")
-        Segmented(listOf(ThemeMode.System to "System", ThemeMode.Light to "Light", ThemeMode.Dark to "Dark"), s.theme) { s = s.copy(theme = it) }
-        if (dynamicColorSupported) LabeledSwitch("Use wallpaper colors", s.dynamicColor) { s = s.copy(dynamicColor = it) }
+        Segmented(listOf(ThemeMode.System to "System", ThemeMode.Light to "Light", ThemeMode.Dark to "Dark"), settings.theme) { onSave(settings.copy(theme = it)) }
+        if (dynamicColorSupported) LabeledSwitch("Use wallpaper colors", settings.dynamicColor) { onSave(settings.copy(dynamicColor = it)) }
 
         HorizontalDivider()
         Section("Learned interests")
@@ -353,10 +386,36 @@ fun SettingsDialog(
         }
 
         HorizontalDivider()
+        SourceKeysSection(sourceKeys)
+
+        if (!LocalTouchUi.current) {
+            HorizontalDivider()
+            Section("Keyboard shortcuts")
+            KEYBOARD_SHORTCUTS.forEach {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(it.keys, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.4f))
+                    Text(it.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.6f))
+                }
+            }
+        }
+
+        HorizontalDivider()
         Section("Subscriptions")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onImport) { Text("Import OPML") }
             OutlinedButton(onClick = onExport) { Text("Export OPML") }
+        }
+
+        HorizontalDivider()
+        Section("Backup")
+        Text(
+            "Save subscriptions, settings and learned interests to a file, or restore them on another device. Stored posts, bookmarks and favorites are not included; they come back as feeds refresh.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onExportBackup) { Text("Save backup") }
+            OutlinedButton(onClick = onImportBackup) { Text("Restore backup") }
         }
 
         HorizontalDivider()

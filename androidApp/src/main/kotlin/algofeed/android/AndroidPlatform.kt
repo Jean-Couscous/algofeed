@@ -46,10 +46,17 @@ class AndroidPlatform(private val context: Context) : PlatformActions {
         }
     }
 
-    override suspend fun saveOpml(content: String): Boolean {
+    override suspend fun saveOpml(content: String): Boolean = save("algofeed-subscriptions.opml", content)
+
+    // The picker already accepts any file, so it serves backups too.
+    override suspend fun pickBackup(): String? = pickOpml()
+
+    override suspend fun saveBackup(suggestedName: String, content: String): Boolean = save(suggestedName, content)
+
+    private suspend fun save(suggestedName: String, content: String): Boolean {
         val launcher = create ?: return false
         val result = CompletableDeferred<Uri?>().also { pendingCreate = it }
-        withContext(Dispatchers.Main) { launcher.launch("algofeed-subscriptions.opml") }
+        withContext(Dispatchers.Main) { launcher.launch(suggestedName) }
         val uri = result.await() ?: return false
         return withContext(Dispatchers.IO) {
             context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(content.encodeToByteArray()) } != null

@@ -34,9 +34,13 @@ class KeystoreSecretStore(
     private val mutex = Mutex()
     private val cache = mutableMapOf<Preferences.Key<String>, String?>()
 
-    override suspend fun hnSession() = get(HN_SESSION)
+    override suspend fun secret(key: String) = get(prefKey(key))
 
-    override suspend fun setHnSession(session: String) = set(HN_SESSION, session)
+    override suspend fun setSecret(key: String, value: String) = set(prefKey(key), value)
+
+    // The HN session kept its original "hn_session" pref name so existing logins survive the upgrade.
+    private fun prefKey(key: String): Preferences.Key<String> =
+        if (key == SecretStore.HN_SESSION_KEY) HN_SESSION else stringPreferencesKey(key)
 
     private suspend fun get(key: Preferences.Key<String>): String? = mutex.withLock {
         forgetLegacyApiKey()

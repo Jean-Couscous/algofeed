@@ -79,4 +79,19 @@ class MigrationTest {
         assertEquals(listOf("rust"), terms)
         assertEquals(listOf("settings"), keys)
     }
+
+    @Test fun entriesGainAMediaColumn() {
+        helper.createDatabase(5).apply {
+            execSQL(
+                """INSERT INTO feed (id, type, url, title, bucket, enabled, createdAt, impressions, opens, favorites, dismissals, preferFeedVersion)
+                   VALUES (1, 'rss', 'https://blog.example/feed', 'Blog', 0, 1, 0, 0, 0, 0, 0, 0)"""
+            )
+            execSQL("INSERT INTO entry (id, feedId, remoteId, sortDate, fetchedAt, readSeconds) VALUES (1, 1, 'a', 0, 0, 0)")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(6)
+        val media = db.prepare("SELECT media FROM entry WHERE id = 1").use { st -> st.step(); st.getText(0) }
+        db.close()
+        assertEquals("[]", media)
+    }
 }

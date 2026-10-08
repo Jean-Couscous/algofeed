@@ -1,6 +1,8 @@
 package algofeed.ui
 
 import algofeed.data.Feed
+import algofeed.data.MediaCodec
+import algofeed.data.MediaKind
 import algofeed.util.Urls
 import algofeed.util.relativeTime
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,8 +75,10 @@ fun ReaderPane(
     val entry = reader.entry
     val link = entry?.url ?: reader.url
     val mediaPage = Urls.isMediaPage(link)
+    // Sources that resolve their attachments (Reddit galleries, Bluesky, 4chan, …) carry them here.
+    val media = remember(entry?.id, entry?.media) { MediaCodec.decode(entry?.media) }
     // Image posts show the image; galleries and videos show their preview and link out for the rest.
-    val picture = if (Urls.isImage(link)) link else if (mediaPage) entry?.thumbnailUrl else null
+    val picture = if (media.isNotEmpty()) null else if (Urls.isImage(link)) link else if (mediaPage) entry?.thumbnailUrl else null
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var commentsTop by remember { mutableStateOf(0) }
@@ -153,7 +157,21 @@ fun ReaderPane(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
                     )
                 }
-                if (mediaPage && link != null) {
+                media.forEach { item ->
+                    AsyncImage(
+                        model = if (item.kind == MediaKind.VIDEO) item.thumbnailUrl ?: item.url else item.url,
+                        contentDescription = item.caption ?: entry?.title,
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                    )
+                    item.caption?.let { c ->
+                        Text(c, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (item.kind == MediaKind.VIDEO) {
+                        TextButton(onClick = { onExternal(); uri.openUri(item.url) }) { Text("Play the video in the browser") }
+                    }
+                }
+                if (mediaPage && link != null && media.isEmpty()) {
                     TextButton(onClick = { onExternal(); uri.openUri(link) }) {
                         Text(if (Urls.host(link) == "v.redd.it") "Play the video in the browser" else "See the whole gallery in the browser")
                     }

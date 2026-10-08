@@ -28,13 +28,9 @@ object Fixtures {
     val html = """<html><head><title>Site</title>
         <link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body>hi</body></html>"""
 
-    val hn = """<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>
-        <title>Hacker News: Front Page</title><link>https://news.ycombinator.com/</link>
-        <item><title>Show HN: A thing</title><link>https://thing.example/</link>
-          <description>Article URL: https://thing.example/ Points: 120</description>
-          <pubDate>Tue, 06 Oct 2026 11:00:00 +0000</pubDate>
-          <comments>https://news.ycombinator.com/item?id=1</comments><guid>https://news.ycombinator.com/item?id=1</guid></item>
-        </channel></rss>"""
+    val hn = """{"hits":[
+        {"objectID":"1","title":"Show HN: A thing","url":"https://thing.example/","author":"pg","points":120,"num_comments":5,"created_at_i":1791280800}
+    ]}"""
 
     val mastodon = """<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>
         <title>Someone</title><link>https://social.example/@someone</link>
@@ -61,6 +57,36 @@ object Fixtures {
         {"kind":"t3","data":{"name":"t3_abc","title":"Cool link","permalink":"/r/x/comments/abc/cool/","url":"https://cool.example/post","is_self":false,"author":"bob","created_utc":1791280000.0,"thumbnail":"https://b.thumbs.redditmedia.com/t.jpg"}},
         {"kind":"t3","data":{"name":"t3_def","title":"Question","permalink":"/r/x/comments/def/q/","url":"https://www.reddit.com/r/x/comments/def/q/","is_self":true,"selftext_html":"<p>Help?</p>","author":"amy","created_utc":1791281000,"thumbnail":"self"}}
     ]}}"""
+
+    val redditGallery = """{"kind":"Listing","data":{"children":[
+        {"kind":"t3","data":{"name":"t3_gal","title":"Gallery","permalink":"/r/x/comments/gal/g/","url":"https://www.reddit.com/gallery/gal","is_gallery":true,"is_self":false,"author":"amy","created_utc":1791281000.0,
+          "gallery_data":{"items":[{"media_id":"m1","caption":"first"},{"media_id":"m2"}]},
+          "media_metadata":{
+            "m1":{"status":"valid","e":"Image","s":{"u":"https://i.redd.it/m1.jpg"},"p":[{"u":"https://preview.redd.it/m1-small.jpg"}]},
+            "m2":{"status":"valid","e":"Image","s":{"u":"https://i.redd.it/m2.jpg"},"p":[]}}}}
+    ]}}"""
+
+    val bluesky = """{"feed":[
+        {"post":{"uri":"at://did:plc:abc/app.bsky.feed.post/xyz","author":{"handle":"alice.bsky.social","displayName":"Alice"},
+          "record":{"text":"hello bsky","createdAt":"2026-10-06T10:00:00Z"},
+          "embed":{"${'$'}type":"app.bsky.embed.images#view","images":[{"thumb":"https://cdn.bsky.app/t.jpg","fullsize":"https://cdn.bsky.app/f.jpg","alt":"a cat"}]},
+          "indexedAt":"2026-10-06T10:00:01Z"}}
+    ]}"""
+
+    val fourchan = """[{"page":1,"threads":[
+        {"no":12345,"sub":"A thread","com":"first <b>post</b>","tim":1600000000000,"ext":".jpg","filename":"pic","time":1791281000,"name":"Anonymous"}
+    ]}]"""
+
+    val tumblr = """{"meta":{"status":200},"response":{"posts":[
+        {"type":"photo","id":42,"id_string":"42","blog_name":"staff","post_url":"https://staff.tumblr.com/post/42","timestamp":1791281000,
+          "summary":"a photo","caption":"<p>look</p>","photos":[{"caption":"","original_size":{"url":"https://64.media.tumblr.com/p.jpg","width":500,"height":500}}]}
+    ]}}"""
+
+    val mangadex = """{"result":"ok","data":[
+        {"id":"chap-1","type":"chapter","attributes":{"volume":"2","chapter":"15","title":"The Duel","translatedLanguage":"en","publishAt":"2026-10-06T10:00:00+00:00"}}
+    ]}"""
+
+    val mangadexManga = """{"result":"ok","data":{"id":"manga-1","type":"manga","attributes":{"title":{"en":"Some Manga"}}}}"""
 
     /** A client that serves [routes] (URL prefix → body) and 404s everything else. */
     fun client(routes: Map<String, String>, requests: MutableList<String> = mutableListOf()) = HttpClient(MockEngine { request ->

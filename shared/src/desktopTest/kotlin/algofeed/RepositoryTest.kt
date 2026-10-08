@@ -20,7 +20,7 @@ class RepositoryTest {
     private val client = Fixtures.client(
         mapOf(
             "https://blog.example/feed" to Fixtures.rss,
-            "https://hnrss.org/frontpage" to Fixtures.hn,
+            "https://hn.algolia.com/api/v1/search" to Fixtures.hn,
             "https://social.example/@someone.rss" to Fixtures.mastodon,
         ),
         requests,

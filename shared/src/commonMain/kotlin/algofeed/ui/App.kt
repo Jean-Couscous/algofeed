@@ -362,8 +362,11 @@ private fun AppContent(
             onResetInterests = vm::resetInterests,
             onImport = { vm.importOpml(platform) },
             onExport = { vm.exportOpml(platform) },
+            onImportBackup = { vm.importBackup(platform) },
+            onExportBackup = { vm.exportBackup(platform) },
             onRemoveAllAndReset = vm::removeAllAndReset,
             hn = if (vm.hasHackerNews) HnAccountActions(state.hnUser, vm::hnLogin, vm::hnLogout) else null,
+            sourceKeys = SourceKeyActions(vm::sourceKey, vm::setSourceKey),
             onDismiss = { dialog = null },
         )
         is DialogState.EditFeed -> EditFeedDialog(d.feed, folders, vm::updateFeed, vm::deleteFeed) { dialog = null }

@@ -1,11 +1,13 @@
 package algofeed
 
 import algofeed.data.Feed
+import algofeed.data.MediaKind
 import algofeed.fetch.EntryDraft
 import algofeed.fetch.FetchResult
 import algofeed.fetch.defaultSources
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -47,13 +49,20 @@ class AdaptersTest {
     }
 
     @Test fun hackerNews() = runTest {
-        val (feed, entries) = fetchAll(mapOf("https://hnrss.org/frontpage" to Fixtures.hn), "hn")
+        val (feed, entries) = fetchAll(mapOf("https://hn.algolia.com/api/v1/search" to Fixtures.hn), "hn")
         assertEquals("hn", feed.type)
         assertEquals("Hacker News", feed.title)
         val e = entries.single()
         assertEquals("https://thing.example/", e.url)
         assertEquals("https://news.ycombinator.com/item?id=1", e.commentsUrl)
+        assertEquals("pg", e.author)
         assertNull(e.summaryHtml)
+    }
+
+    @Test fun hackerNewsTextPostLinksToTheItem() = runTest {
+        val body = """{"hits":[{"objectID":"9","title":"Ask HN: anything?","author":"a","created_at_i":1791281000}]}"""
+        val (_, entries) = fetchAll(mapOf("https://hn.algolia.com/api/v1/search" to body), "hn")
+        assertEquals("https://news.ycombinator.com/item?id=9", entries.single().url)
     }
 
     @Test fun mastodonHandle() = runTest {
@@ -139,40 +148,74 @@ class AdaptersTest {
         assertEquals("https://kite.kagi.com/usa_%7C_georgia.xml", fetchAll(routes, "kagi: usa | georgia").first.url)
     }
 
-    @Test fun redditThreadFromJson() = runTest {
-        val json = """[{"kind":"Listing","data":{"children":[]}},{"kind":"Listing","data":{"children":[
-            {"kind":"t1","data":{"id":"a1","author":"bob","body":"Top","body_html":"<div><p>Top</p></div>","created_utc":1791280800.0,
-              "replies":{"kind":"Listing","data":{"children":[
-                {"kind":"t1","data":{"id":"a2","author":"[deleted]","body":"[removed]","body_html":"<p>[removed]</p>","created_utc":1791280900.0,"replies":""}},
-                {"kind":"more","data":{"count":3}}]}}}},
-            {"kind":"t1","data":{"id":"a3","author":"eve","body":"Second","body_html":"<p>Second</p>","created_utc":1791281000.0,"replies":""}}]}}]"""
-        val reddit = defaultSources(Fixtures.client(mapOf("https://www.reddit.com/r/x/comments/abc/post/.json" to json)))
-            .adapters.filterIsInstance<algofeed.fetch.RedditAdapter>().single()
-        val thread = reddit.thread("https://www.reddit.com/r/x/comments/abc/post/")
-        assertEquals(listOf("bob", "eve"), thread.comments.map { it.author })
-        val reply = thread.comments[0].children.single()
-        assertNull(reply.author)
-        assertNull(reply.html)
-        assertEquals("a1".toLong(36), thread.comments[0].id)
-        assertEquals(1_791_280_800_000L, thread.comments[0].time)
-        assertEquals(false, thread.flat)
+    @Test fun redditGallery() = runTest {
+        val (_, entries) = fetchAll(mapOf("https://www.reddit.com/r/x/.json" to Fixtures.redditGallery), "r/x")
+        val e = entries.single()
+        assertEquals(2, e.media.size)
+        assertEquals("https://i.redd.it/m1.jpg", e.media[0].url)
+        assertEquals(MediaKind.IMAGE, e.media[0].kind)
+        assertEquals("first", e.media[0].caption)
+        assertEquals("https://preview.redd.it/m1-small.jpg", e.media[0].thumbnailUrl)
+        // With no top-level thumbnail, the card falls back to the first gallery image's preview.
+        assertEquals("https://preview.redd.it/m1-small.jpg", e.thumbnailUrl)
     }
 
-    @Test fun redditThreadFallsBackToFlatRss() = runTest {
-        val rss = """<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>post</title>
-            <entry><author><name>/u/op</name></author><id>t3_abc</id><title>Post</title><link href="https://www.reddit.com/r/x/comments/abc/post/"/>
-            <updated>2026-10-06T10:00:00Z</updated><content type="html">&lt;p&gt;post&lt;/p&gt;</content></entry>
-            <entry><author><name>/u/bob</name></author><id>t1_a1</id><title>/u/bob on Post</title><link href="https://www.reddit.com/r/x/comments/abc/post/a1/"/>
-            <updated>2026-10-06T11:00:00Z</updated><content type="html">&lt;div class="md"&gt;&lt;p&gt;Sauce&lt;/p&gt;&lt;/div&gt;</content></entry></feed>"""
-        // No JSON route: Reddit refused it, as it does without an account.
-        val reddit = defaultSources(Fixtures.client(mapOf("https://www.reddit.com/r/x/comments/abc/post/.rss" to rss)))
-            .adapters.filterIsInstance<algofeed.fetch.RedditAdapter>().single()
-        val thread = reddit.thread("https://old.reddit.com/r/x/comments/abc/post/")
-        assertTrue(thread.flat)
-        val c = thread.comments.single()
-        assertEquals("bob", c.author)
-        assertTrue(c.html!!.contains("Sauce"))
-        assertEquals("a1".toLong(36), c.id)
+    @Test fun bluesky() = runTest {
+        val (feed, entries) = fetchAll(
+            mapOf("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed" to Fixtures.bluesky),
+            "@alice.bsky.social",
+        )
+        assertEquals("bluesky", feed.type)
+        val e = entries.single()
+        assertEquals("https://bsky.app/profile/alice.bsky.social/post/xyz", e.url)
+        assertTrue(e.contentHtml!!.contains("hello bsky"))
+        assertEquals("https://cdn.bsky.app/f.jpg", e.media.single().url)
+        assertEquals("a cat", e.media.single().caption)
+    }
+
+    @Test fun fourChan() = runTest {
+        val (feed, entries) = fetchAll(mapOf("https://a.4cdn.org/g/catalog.json" to Fixtures.fourchan), "4chan:g")
+        assertEquals("4chan", feed.type)
+        val e = entries.single()
+        assertEquals("A thread", e.title)
+        assertEquals("https://boards.4chan.org/g/thread/12345", e.url)
+        assertEquals("https://i.4cdn.org/g/1600000000000.jpg", e.media.single().url)
+        assertEquals(MediaKind.IMAGE, e.media.single().kind)
+    }
+
+    @Test fun mangadex() = runTest {
+        val routes = mapOf(
+            "https://api.mangadex.org/manga/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/feed" to Fixtures.mangadex,
+            "https://api.mangadex.org/manga/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" to Fixtures.mangadexManga,
+        )
+        val (feed, entries) = fetchAll(routes, "https://mangadex.org/title/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/some-manga")
+        assertEquals("mangadex", feed.type)
+        assertEquals("Some Manga", feed.title)
+        val e = entries.single()
+        assertEquals("Vol. 2 Ch. 15 — The Duel", e.title)
+        assertEquals("https://mangadex.org/chapter/chap-1", e.url)
+    }
+
+    @Test fun tumblrNeedsAKey() = runTest {
+        val sources = defaultSources(Fixtures.client(mapOf("https://api.tumblr.com/v2/blog/staff.tumblr.com/posts" to Fixtures.tumblr)))
+        val info = sources.resolve("staff.tumblr.com")
+        assertEquals("tumblr", info.type)
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        // No key configured: it fails cleanly rather than fetching.
+        assertFailsWith<algofeed.fetch.FetchException> { sources.forFeed(feed).fetch(feed) }
+    }
+
+    @Test fun tumblrWithKey() = runTest {
+        val sources = defaultSources(
+            Fixtures.client(mapOf("https://api.tumblr.com/v2/blog/staff.tumblr.com/posts" to Fixtures.tumblr)),
+        ) { if (it == SecretStore.TUMBLR_API_KEY) "key123" else null }
+        val info = sources.resolve("staff.tumblr.com")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        val result = sources.forFeed(feed).fetch(feed)
+        assertIs<FetchResult.Fetched>(result)
+        val e = result.entries.single()
+        assertEquals("https://staff.tumblr.com/post/42", e.url)
+        assertEquals("https://64.media.tumblr.com/p.jpg", e.media.single().url)
     }
 
     @Test fun redditSkipsJsonForAWhileAfterA403() = runTest {
@@ -189,8 +232,8 @@ class AdaptersTest {
         val sources = defaultSources(client)
         val info = sources.resolve("r/x")
         val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        // The first fetch hits .json (403) then falls back to .rss; the second skips .json entirely.
         repeat(2) { assertIs<FetchResult.Fetched>(sources.forFeed(feed).fetch(feed)) }
-        sources.adapters.filterIsInstance<algofeed.fetch.RedditAdapter>().single().thread("https://www.reddit.com/r/x/comments/a/post/")
         assertEquals(1, requests.count { ".json" in it }, requests.toString())
     }
 }

@@ -1,0 +1,2 @@
+- Mangadex: followed-manga updates feed (needs OAuth — a personal client id/secret plus login; the public per-title feed is done)
+- Reddit/4chan videos play in the browser only; no inline playback

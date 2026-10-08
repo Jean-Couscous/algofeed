@@ -55,9 +55,7 @@ private const val PAGE = 40
 
 @Composable
 fun CommentsSection(state: CommentsState, actions: CommentActions, onOpenThread: () -> Unit) {
-    // Voting and replying exist only for Hacker News; Reddit threads are read-only.
-    val hn = state.source == CommentSource.HackerNews
-    val canWrite = hn && actions.loggedIn
+    val canWrite = actions.loggedIn
     var collapsed by remember(state.storyId) { mutableStateOf(emptySet<Long>()) }
     var shown by remember(state.storyId) { mutableStateOf(PAGE) }
     var replyTo by remember { mutableStateOf<ReplyTarget?>(null) }
@@ -75,14 +73,7 @@ fun CommentsSection(state: CommentsState, actions: CommentActions, onOpenThread:
             TextButton(onClick = onOpenThread) { Text("Open on ${state.source.siteName}") }
             if (canWrite) TextButton(onClick = { replyTo = ReplyTarget(state.storyId, null) }) { Text("Add comment") }
         }
-        if (state.thread?.flat == true) {
-            Text(
-                "Reddit only lets apps without an account read this thread as a list, so replies aren't nested under their parents.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (hn && !actions.loggedIn) {
+        if (!actions.loggedIn) {
             Text(
                 "Log in to Hacker News in Settings to vote and reply.",
                 style = MaterialTheme.typography.bodySmall,

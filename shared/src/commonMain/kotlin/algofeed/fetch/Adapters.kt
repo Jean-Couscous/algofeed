@@ -1,6 +1,8 @@
 package algofeed.fetch
 
 import algofeed.data.Feed
+import algofeed.data.MediaItem
+import algofeed.data.MediaKind
 import algofeed.util.Html
 import algofeed.util.nowMillis
 import com.prof18.rssparser.RssParser
@@ -18,24 +20,59 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
-/** Hacker News front page through hnrss.org; links point to the article, comments to HN. */
-class HackerNewsAdapter(client: HttpClient, parser: RssParser = createRssParser()) : RssAdapter(client, parser) {
+/**
+ * Hacker News front page via the official Algolia API. The old hnrss.org mirror was unreliable
+ * (frequent 5xx and empty responses), which surfaced as a persistent feed error; Algolia does not.
+ * Links point to the article, comments to the HN item page.
+ */
+class HackerNewsAdapter(private val client: HttpClient) : SourceAdapter {
     override val type = "hn"
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     override fun accepts(input: String): Boolean {
         val s = input.lowercase()
         return s == "hn" || s == "hackernews" || "news.ycombinator.com" in s || "hnrss.org" in s
     }
 
-    override fun feedUrlFor(input: String): String =
-        if ("hnrss.org" in input) input.withScheme() else "https://hnrss.org/frontpage"
+    override suspend fun resolve(input: String) = FeedInfo(
+        type = type,
+        url = FRONT_PAGE,
+        title = "Hacker News",
+        siteUrl = HN_SITE,
+        iconUrl = "$HN_SITE/favicon.ico",
+    )
 
-    override fun defaultTitle(channel: RssChannel, url: String) =
-        if (url.endsWith("/frontpage")) "Hacker News" else super.defaultTitle(channel, url)
+    // Feeds subscribed under the old hnrss URL still resolve here by type; always read the Algolia front page.
+    override suspend fun fetch(feed: Feed): FetchResult =
+        FetchResult.Fetched(parseFrontPage(client.getOk(FRONT_PAGE).bodyAsText()))
 
-    // hnrss descriptions only repeat the URLs and point count.
-    override fun mapItem(item: RssItem, draft: EntryDraft) = draft.copy(summaryHtml = null)
+    fun parseFrontPage(body: String): List<EntryDraft> {
+        val hits = json.parseToJsonElement(body).jsonObject["hits"]?.jsonArray
+            ?: throw FetchException("Unexpected Hacker News response")
+        return hits.mapNotNull { hit ->
+            val o = hit.jsonObject
+            val id = o.str("objectID") ?: return@mapNotNull null
+            val comments = "$HN_SITE/item?id=$id"
+            EntryDraft(
+                remoteId = id,
+                url = o.str("url") ?: comments,
+                title = o.str("title"),
+                sortDate = (o["created_at_i"]?.jsonPrimitive?.longOrNull ?: 0) * 1000,
+                commentsUrl = comments,
+                author = o.str("author"),
+            )
+        }
+    }
+
+    private fun JsonObject.str(key: String) = this[key]?.jsonPrimitive?.takeIf { it.isString }?.content?.ifBlank { null }
+
+    private companion object {
+        const val HN_SITE = "https://news.ycombinator.com"
+        const val FRONT_PAGE = "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=50"
+    }
 }
 
 /** Lobsters, front page or a tag (`lobste.rs/t/rust`). */
@@ -222,46 +259,6 @@ class RedditAdapter(
         return FetchResult.Fetched(parseListing(body))
     }
 
-    /**
-     * The comments of a post, read-only. The JSON gives the tree; when Reddit refuses it (as it often
-     * does without an account), the thread's RSS still lists up to 100 comments, but without parents.
-     */
-    suspend fun thread(postUrl: String): CommentThread {
-        val url = canonical(postUrl)
-        jsonOrNull("$url/.json?raw_json=1&limit=500")
-            ?.let { body -> runCatching { parseComments(body) }.getOrNull() }
-            ?.let { return CommentThread(it) }
-        val feed = Feed(id = 0, type = type, url = "$url/.rss?limit=100", title = "", createdAt = 0)
-        val drafts = (rss.fetch(feed) as? FetchResult.Fetched)?.entries.orEmpty()
-        val comments = drafts.mapNotNull { d ->
-            // The post itself comes first as t3_…; comments are t1_….
-            val id = d.remoteId.takeIf { it.startsWith("t1_") }?.removePrefix("t1_")?.toLongOrNull(36) ?: return@mapNotNull null
-            Comment(id, d.author?.removePrefix("/u/"), d.contentHtml ?: d.summaryHtml, d.sortDate)
-        }
-        return CommentThread(comments, flat = true)
-    }
-
-    fun parseComments(body: String): List<Comment> {
-        val listing = json.parseToJsonElement(body).jsonArray.getOrNull(1)?.jsonObject
-            ?: throw FetchException("Unexpected Reddit response")
-        fun children(listing: JsonObject?): List<Comment> =
-            listing?.get("data")?.jsonObject?.get("children")?.jsonArray.orEmpty().mapNotNull { child ->
-                val o = child.jsonObject
-                // "more" stubs stand for replies that need another request; the thread shows what came.
-                if (o["kind"]?.jsonPrimitive?.content != "t1") return@mapNotNull null
-                val d = o["data"]?.jsonObject ?: return@mapNotNull null
-                val deleted = d.str("author") == "[deleted]"
-                Comment(
-                    id = d.str("id")?.toLongOrNull(36) ?: return@mapNotNull null,
-                    author = d.str("author")?.takeUnless { deleted },
-                    html = d.str("body_html")?.takeUnless { deleted && d.str("body") in setOf("[deleted]", "[removed]") },
-                    time = d["created_utc"]?.jsonPrimitive?.doubleOrNull?.let { (it * 1000).toLong() } ?: 0,
-                    children = children(d["replies"] as? JsonObject),
-                )
-            }
-        return children(listing)
-    }
-
     fun parseListing(body: String): List<EntryDraft> {
         val now = nowMillis()
         val children = json.parseToJsonElement(body).jsonObject["data"]?.jsonObject?.get("children")?.jsonArray
@@ -271,9 +268,11 @@ class RedditAdapter(
             if (d.bool("stickied")) return@mapNotNull null
             val permalink = "https://www.reddit.com" + d.str("permalink")
             val isSelf = d.bool("is_self")
+            val media = redditMedia(d)
             val thumbnail = d.str("thumbnail")?.takeIf { it.startsWith("http") }
                 ?: d["preview"]?.jsonObject?.get("images")?.jsonArray?.firstOrNull()
                     ?.jsonObject?.get("source")?.jsonObject?.str("url")
+                ?: media.firstOrNull()?.let { it.thumbnailUrl ?: it.url }
             EntryDraft(
                 remoteId = d.str("name") ?: permalink,
                 url = if (isSelf) permalink else d.str("url") ?: permalink,
@@ -284,8 +283,32 @@ class RedditAdapter(
                 summaryHtml = d.str("selftext_html"),
                 contentHtml = if (isSelf) d.str("selftext_html") else null,
                 thumbnailUrl = thumbnail,
+                media = media,
             )
         }
+    }
+
+    /** Gallery pages and Reddit-hosted videos, resolved to their attachments. Needs `raw_json=1` so URLs aren't HTML-escaped. */
+    private fun redditMedia(d: JsonObject): List<MediaItem> {
+        if (d.bool("is_gallery")) {
+            val meta = d["media_metadata"]?.jsonObject ?: return emptyList()
+            val items = d["gallery_data"]?.jsonObject?.get("items")?.jsonArray ?: return emptyList()
+            return items.mapNotNull { item ->
+                val o = item.jsonObject
+                val m = meta[o.str("media_id")]?.jsonObject ?: return@mapNotNull null
+                val source = m["s"]?.jsonObject
+                val gif = source?.str("gif")
+                val url = gif ?: source?.str("u") ?: return@mapNotNull null
+                val thumb = m["p"]?.jsonArray?.lastOrNull()?.jsonObject?.str("u")
+                MediaItem(url, if (gif != null) MediaKind.GIF else MediaKind.IMAGE, thumbnailUrl = thumb, caption = o.str("caption"))
+            }
+        }
+        d["media"]?.jsonObject?.get("reddit_video")?.jsonObject?.str("fallback_url")?.let { video ->
+            val thumb = d.str("thumbnail")?.takeIf { it.startsWith("http") }
+                ?: d["preview"]?.jsonObject?.get("images")?.jsonArray?.firstOrNull()?.jsonObject?.get("source")?.jsonObject?.str("url")
+            return listOf(MediaItem(video, MediaKind.VIDEO, thumbnailUrl = thumb))
+        }
+        return emptyList()
     }
 
     private fun fromRss(draft: EntryDraft): EntryDraft {
@@ -315,17 +338,21 @@ class RedditAdapter(
     }
 }
 
-fun defaultSources(client: HttpClient): Sources {
+fun defaultSources(client: HttpClient, secrets: algofeed.SecretReader? = null): Sources {
     val parser = createRssParser()
     val rss = RssAdapter(client, parser)
     return Sources(
         adapters = listOf(
             RedditAdapter(client, rss),
             YouTubeAdapter(client, parser),
-            HackerNewsAdapter(client, parser),
+            HackerNewsAdapter(client),
             KagiNewsAdapter(client, parser),
             LobstersAdapter(client, parser),
             MastodonAdapter(client, parser),
+            BlueskyAdapter(client),
+            FourChanAdapter(client),
+            TumblrAdapter(client, secrets),
+            MangadexAdapter(client),
             rss,
         ),
         fallback = rss,

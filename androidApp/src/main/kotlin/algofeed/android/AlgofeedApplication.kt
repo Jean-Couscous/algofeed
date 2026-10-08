@@ -26,9 +26,10 @@ class AlgofeedApplication : Application(), RefreshHost {
     val repository: Repository by lazy {
         val db = Room.databaseBuilder<AppDatabase>(this, getDatabasePath("algofeed.db").absolutePath).buildAlgofeed()
         val client = createHttpClient()
+        val secretStore = KeystoreSecretStore(secretsDataStore)
         Repository(
-            db, defaultSources(client), createReaderExtractor(client),
-            secrets = KeystoreSecretStore(secretsDataStore),
+            db, defaultSources(client) { secretStore.secret(it) }, createReaderExtractor(client),
+            secrets = secretStore,
             // Hourly by default to spare the battery; the user can lower it to WorkManager's 15 minutes.
             defaults = Settings(refreshMinutes = 60),
             hackerNews = HackerNews(client),
