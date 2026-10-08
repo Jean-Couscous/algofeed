@@ -194,6 +194,55 @@ class AdaptersTest {
         assertEquals(MediaKind.IMAGE, e.media.single().kind)
     }
 
+    @Test fun fourChanConditional() = runTest {
+        val lastModified = "Wed, 08 Oct 2026 10:00:00 GMT"
+        val client = io.ktor.client.HttpClient(io.ktor.client.engine.mock.MockEngine { request ->
+            if (request.headers[io.ktor.http.HttpHeaders.IfModifiedSince] != null) {
+                respond("", io.ktor.http.HttpStatusCode.NotModified)
+            } else {
+                respond(
+                    Fixtures.fourchan,
+                    io.ktor.http.HttpStatusCode.OK,
+                    io.ktor.http.headersOf(io.ktor.http.HttpHeaders.LastModified, lastModified),
+                )
+            }
+        })
+        val sources = defaultSources(client)
+        val info = sources.resolve("4chan:g")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, siteUrl = info.siteUrl, createdAt = 0)
+        val first = sources.forFeed(feed).fetch(feed)
+        assertIs<FetchResult.Fetched>(first)
+        assertEquals(lastModified, first.lastModified)
+        // With the stored Last-Modified echoed back, the catalog returns 304 and isn't re-parsed.
+        val stale = feed.copy(lastModified = first.lastModified)
+        assertEquals(FetchResult.NotModified, sources.forFeed(stale).fetch(stale))
+    }
+
+    @Test fun fourChanThread() = runTest {
+        val threadJson = """{"posts":[
+            {"no":100,"time":1791281000,"name":"Anonymous","sub":"OP","com":"the op"},
+            {"no":101,"time":1791281100,"name":"Anonymous","com":"a <b>reply</b>"},
+            {"no":102,"time":1791281200,"name":"Namefag","com":"another"},
+            {"no":103,"time":1791281300,"name":"Anonymous","tim":1600000000001,"ext":".jpg","filename":"cat"},
+            {"no":104,"time":1791281400,"name":"Anonymous","tim":1600000000002,"ext":".webm","filename":"clip"}
+        ]}"""
+        val adapter = algofeed.fetch.FourChanAdapter(Fixtures.client(mapOf("https://a.4cdn.org/g/thread/100.json" to threadJson)))
+        val thread = adapter.thread("https://boards.4chan.org/g/thread/100")
+        // The OP is dropped (the reader already shows it); replies stay in order.
+        assertEquals(4, thread.comments.size)
+        assertEquals(101L, thread.comments.first().id)
+        assertEquals("a <b>reply</b>", thread.comments.first().html)
+        assertEquals("Namefag", thread.comments[1].author)
+        // An image reply carries the picture; a video reply carries the clip, both with a thumbnail.
+        val image = thread.comments[2]
+        assertEquals("https://i.4cdn.org/g/1600000000001.jpg", image.imageUrl)
+        assertEquals("https://i.4cdn.org/g/1600000000001s.jpg", image.thumbnailUrl)
+        assertNull(image.videoUrl)
+        val video = thread.comments[3]
+        assertEquals("https://i.4cdn.org/g/1600000000002.webm", video.videoUrl)
+        assertNull(video.imageUrl)
+    }
+
     @Test fun mangadex() = runTest {
         val routes = mapOf(
             "https://api.mangadex.org/manga/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/feed" to Fixtures.mangadex,

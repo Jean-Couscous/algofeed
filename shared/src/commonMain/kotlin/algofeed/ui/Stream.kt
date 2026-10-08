@@ -7,6 +7,12 @@ import algofeed.rank.Breakdown
 import algofeed.rank.Ranked
 import algofeed.util.Html
 import algofeed.util.relativeTime
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +33,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -323,6 +330,45 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Placeholder cards shown on a cold start when the database has nothing cached yet. */
+@Composable
+fun SkeletonList(modifier: Modifier = Modifier) {
+    val pulse = rememberInfiniteTransition(label = "skeleton")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "skeleton-alpha",
+    )
+    Column(modifier.fillMaxSize()) {
+        repeat(6) { i ->
+            SkeletonCard(alpha, withThumbnail = i % 2 == 0)
+            HorizontalDivider(color = LocalExtraColors.current.divider)
+        }
+    }
+}
+
+@Composable
+private fun SkeletonCard(alpha: Float, withThumbnail: Boolean) {
+    val tone = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
+    fun Modifier.block() = clip(RoundedCornerShape(4.dp)).background(tone)
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(20.dp).clip(CircleShape).background(tone))
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.width(120.dp).height(11.dp).block())
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(Modifier.fillMaxWidth(0.92f).height(15.dp).block())
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth(0.55f).height(15.dp).block())
+        if (withThumbnail) {
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).background(tone))
         }
     }
 }

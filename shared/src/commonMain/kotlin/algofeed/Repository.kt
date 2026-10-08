@@ -14,6 +14,7 @@ import algofeed.fetch.HackerNews
 import algofeed.fetch.HackerNewsException
 import algofeed.fetch.HnItemPage
 import algofeed.fetch.CommentThread
+import algofeed.fetch.FourChanAdapter
 import algofeed.fetch.Sources
 import algofeed.opml.Opml
 import algofeed.rank.Buckets
@@ -152,6 +153,13 @@ class Repository(
 
     suspend fun hnThread(itemId: Long): CommentThread = hackerNews!!.thread(itemId, hnSession())
 
+    /** The replies to a 4chan thread, from its web URL. */
+    suspend fun fourchanThread(url: String): CommentThread {
+        val adapter = sources.adapters.firstOrNull { it is FourChanAdapter } as? FourChanAdapter
+            ?: throw FetchException("4chan isn't available")
+        return adapter.thread(url)
+    }
+
     private suspend fun requireHnSession() = hnSession() ?: throw HackerNewsException("Log in to Hacker News in Settings first")
 
     /** Upvotes or unvotes a story or comment; a [page] that has the link saves fetching the item page. */
@@ -216,7 +224,7 @@ class Repository(
      * particular, rate-limit quick refetches), then prunes old entries and decays the profile.
      */
     suspend fun refreshAll(
-        concurrency: Int = 6,
+        concurrency: Int = 10,
         minIntervalMs: Long = 5 * 60_000L,
         onProgress: (RefreshProgress) -> Unit = {},
     ): RefreshResult = coroutineScope {
@@ -305,7 +313,9 @@ class Repository(
             StreamView.Home -> {
                 val since = clock() - settings.retentionDays * DAY_MS
                 val candidates = if (settings.includeSeen) entries.candidatesIncludingSeen(since) else entries.candidates(since)
-                rank(candidates, settings)
+                // Twitter-style: show newest first while the profile still learns from the user's signals.
+                if (settings.chronologicalHome) candidates.sortedByDescending { it.sortDate }.unranked()
+                else rank(candidates, settings)
             }
             StreamView.Favorites -> entries.favorites().unranked()
             StreamView.Bookmarks -> entries.bookmarks().unranked()

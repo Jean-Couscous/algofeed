@@ -160,6 +160,16 @@ private fun AppContent(
 
     LaunchedEffect(state.view, state.loading) { if (!state.loading) listState.scrollToItem(0) }
 
+    // New entries merge on their own only while the user is at the very top; scrolled into the
+    // feed, the "Show N new entries" button keeps their place instead.
+    LaunchedEffect(state.newAvailable) {
+        if (state.newAvailable > 0 && !state.loading && !state.refreshing &&
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        ) {
+            vm.reload()
+        }
+    }
+
     LaunchedEffect(state.focused) {
         if (state.focused < 0) return@LaunchedEffect
         val visible = listState.layoutInfo.visibleItemsInfo
@@ -254,7 +264,7 @@ private fun AppContent(
                     }
                 }
                 when {
-                    state.loading && state.items.isEmpty() -> Box(Modifier.fillMaxSize())
+                    state.loading && state.items.isEmpty() -> SkeletonList()
                     state.items.isEmpty() && state.view == StreamView.Bookmarks -> EmptyState(
                         title = "Save entries for later",
                         body = "Bookmark entries to find them again here. Removing a bookmark doesn't affect the entry.",

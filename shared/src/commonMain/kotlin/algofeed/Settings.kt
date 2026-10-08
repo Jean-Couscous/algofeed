@@ -19,4 +19,6 @@ data class Settings(
     val retentionDays: Int = 30,
     /** Show entries already scrolled past in the home stream. */
     val includeSeen: Boolean = false,
+    /** Order Home newest-first instead of by the learned ranking (which keeps learning either way). */
+    val chronologicalHome: Boolean = true,
 )

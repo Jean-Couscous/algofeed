@@ -45,10 +45,12 @@ data class ReaderState(
     val open get() = entry != null || url != null
 }
 
-enum class CommentSource(val siteName: String) { HackerNews("HN") }
+enum class CommentSource(val siteName: String) { HackerNews("HN"), FourChan("4chan") }
 
 /** Feed types whose entries carry everything to show; the reader renders them without extracting an article. */
 private val SELF_CONTAINED = setOf("mastodon", "kagi", "bluesky", "4chan", "tumblr", "mangadex")
+
+private val FOURCHAN_THREAD = Regex("""4chan(?:nel)?\.org/[a-z0-9]+/thread/(\d+)""", RegexOption.IGNORE_CASE)
 
 data class CommentsState(
     /** The HN item id. */
@@ -186,8 +188,12 @@ class AlgofeedViewModel(
             _state.update { it.copy(refreshing = false, progress = null) }
             result.onFailure { e -> notify("Refresh failed: ${e.message}") }
             result.onSuccess { r ->
-                if (reloadAfter || _state.value.items.isEmpty()) reload()
-                else if (r.newEntries > 0) _state.update { it.copy(newAvailable = it.newAvailable + r.newEntries) }
+                when {
+                    reloadAfter || _state.value.items.isEmpty() -> reload()
+                    r.newEntries > 0 -> _state.update { it.copy(newAvailable = it.newAvailable + r.newEntries) }
+                    // A manual refresh that changed nothing would otherwise give no sign it ran.
+                    manual && r.failures.isEmpty() -> notify("You're up to date")
+                }
                 if (r.failures.isNotEmpty()) notify("${r.failures.size} feed(s) failed to update")
             }
         }
@@ -386,6 +392,7 @@ class AlgofeedViewModel(
     private fun commentsFor(entry: Entry): CommentsState? {
         val url = entry.commentsUrl ?: return null
         HackerNews.itemId(url)?.takeIf { repo.hasHackerNews }?.let { return CommentsState(it, CommentSource.HackerNews, url) }
+        FOURCHAN_THREAD.find(url)?.let { return CommentsState(it.groupValues[1].toLong(), CommentSource.FourChan, url) }
         return null
     }
 
@@ -394,7 +401,12 @@ class AlgofeedViewModel(
         commentsJob?.cancel()
         commentsJob = viewModelScope.launch {
             _state.update { it.copy(reader = it.reader.copy(comments = comments.copy(loading = true, error = null))) }
-            val result = runCatchingCancellable { repo.hnThread(comments.storyId) }
+            val result = runCatchingCancellable {
+                when (comments.source) {
+                    CommentSource.HackerNews -> repo.hnThread(comments.storyId)
+                    CommentSource.FourChan -> repo.fourchanThread(comments.threadUrl)
+                }
+            }
             _state.update { s ->
                 if (s.reader.comments?.storyId != comments.storyId) return@update s
                 s.copy(

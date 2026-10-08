@@ -5,6 +5,7 @@ local.properties
 .idea/
 *.iml
 release-build/
+/changelog.md
 
 # Inputs and outputs of packaging/arch/PKGBUILD
 packaging/arch/app/

@@ -408,18 +408,24 @@ fun SettingsDialog(
         dismissButton = null,
     ) {
         Section("Home ordering")
+        LabeledSwitch("Newest first", settings.chronologicalHome) { onSave(settings.copy(chronologicalHome = it)) }
         Text(
-            "One mix of four things. Raise Freshness to lean towards newest first, Quiet feeds to let rarely " +
+            if (settings.chronologicalHome)
+                "Home shows the newest entries first. Algofeed still learns from what you open, favorite and " +
+                    "hide, ready for when you switch to the ranked mix."
+            else "One mix of four things. Raise Freshness to lean towards newest first, Quiet feeds to let rarely " +
                 "posting feeds rise above busy ones, and the last two to follow what you open, favorite and hide.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val w = settings.weights
-        WeightSlider("Freshness", w.recency) { onSave(settings.copy(weights = w.copy(recency = it))) }
-        WeightSlider("Quiet feeds", w.rarity) { onSave(settings.copy(weights = w.copy(rarity = it))) }
-        WeightSlider("Feeds you engage with", w.source) { onSave(settings.copy(weights = w.copy(source = it))) }
-        WeightSlider("Topics you read", w.content) { onSave(settings.copy(weights = w.copy(content = it))) }
-        TextButton(onClick = { onSave(settings.copy(weights = algofeed.rank.Weights())) }) { Text("Reset to defaults") }
+        if (!settings.chronologicalHome) {
+            val w = settings.weights
+            WeightSlider("Freshness", w.recency) { onSave(settings.copy(weights = w.copy(recency = it))) }
+            WeightSlider("Quiet feeds", w.rarity) { onSave(settings.copy(weights = w.copy(rarity = it))) }
+            WeightSlider("Feeds you engage with", w.source) { onSave(settings.copy(weights = w.copy(source = it))) }
+            WeightSlider("Topics you read", w.content) { onSave(settings.copy(weights = w.copy(content = it))) }
+            TextButton(onClick = { onSave(settings.copy(weights = algofeed.rank.Weights())) }) { Text("Reset to defaults") }
+        }
         LabeledSwitch("Show entries already scrolled past", settings.includeSeen) { onSave(settings.copy(includeSeen = it)) }
 
         HorizontalDivider()

@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
+import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -37,6 +43,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -54,7 +62,13 @@ class CommentActions(
 private const val PAGE = 40
 
 @Composable
-fun CommentsSection(state: CommentsState, actions: CommentActions, onOpenThread: () -> Unit) {
+fun CommentsSection(
+    state: CommentsState,
+    actions: CommentActions,
+    onOpenThread: () -> Unit,
+    /** Each comment reports its root-space top here, so a quote link can scroll to it. */
+    positions: MutableMap<Long, Float>? = null,
+) {
     val canWrite = actions.loggedIn
     var collapsed by remember(state.storyId) { mutableStateOf(emptySet<Long>()) }
     var shown by remember(state.storyId) { mutableStateOf(PAGE) }
@@ -73,7 +87,7 @@ fun CommentsSection(state: CommentsState, actions: CommentActions, onOpenThread:
             TextButton(onClick = onOpenThread) { Text("Open on ${state.source.siteName}") }
             if (canWrite) TextButton(onClick = { replyTo = ReplyTarget(state.storyId, null) }) { Text("Add comment") }
         }
-        if (!actions.loggedIn) {
+        if (!actions.loggedIn && state.source == CommentSource.HackerNews) {
             Text(
                 "Log in to Hacker News in Settings to vote and reply.",
                 style = MaterialTheme.typography.bodySmall,
@@ -89,14 +103,23 @@ fun CommentsSection(state: CommentsState, actions: CommentActions, onOpenThread:
             Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         for ((comment, depth) in rows.take(shown)) {
+          Box(if (positions != null) Modifier.onGloballyPositioned { positions[comment.id] = it.positionInRoot().y } else Modifier) {
             CommentRow(
                 comment = comment,
                 depth = depth,
                 collapsed = comment.id in collapsed,
                 actions = actions,
+                // 4chan replies are referenced by their post number; HN item ids aren't shown.
+                postId = comment.id.takeIf { state.source == CommentSource.FourChan },
+                // Resolves the quote links in the comment's HTML back to its own site.
+                linkBase = when (state.source) {
+                    CommentSource.HackerNews -> "${HackerNews.BASE}/item?id=${comment.id}"
+                    CommentSource.FourChan -> state.threadUrl
+                },
                 onToggle = { collapsed = if (comment.id in collapsed) collapsed - comment.id else collapsed + comment.id },
                 onReply = { replyTo = ReplyTarget(comment.id, comment.author) },
             )
+          }
         }
         if (rows.size > shown) {
             OutlinedButton(onClick = { shown += PAGE }) { Text("Show more comments (${rows.size - shown} left)") }
@@ -119,6 +142,8 @@ private fun CommentRow(
     depth: Int,
     collapsed: Boolean,
     actions: CommentActions,
+    postId: Long?,
+    linkBase: String,
     onToggle: () -> Unit,
     onReply: () -> Unit,
 ) {
@@ -140,6 +165,13 @@ private fun CommentRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                postId?.let {
+                    Text(
+                        "  No. $it",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     if (collapsed) "  [+${1 + countAll(comment.children)}]" else "  [–]",
                     style = MaterialTheme.typography.labelMedium,
@@ -158,8 +190,34 @@ private fun CommentRow(
                 }
             }
             if (!collapsed) {
-                comment.html?.let { HtmlContent(it, "${HackerNews.BASE}/item?id=${comment.id}", compact = true) }
-                    ?: Text("[deleted]", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                comment.html?.let { HtmlContent(it, linkBase, compact = true) }
+                val uri = LocalUriHandler.current
+                val topPad = if (comment.html != null) 8.dp else 0.dp
+                when {
+                    comment.videoUrl != null && inlineVideoSupported -> InlineVideo(
+                        url = comment.videoUrl,
+                        thumbnailUrl = comment.thumbnailUrl,
+                        autoPlay = false,
+                        muted = false,
+                        showControls = true,
+                        modifier = Modifier.padding(top = topPad).fillMaxWidth().sizeIn(maxWidth = 360.dp),
+                        onClick = null,
+                    )
+                    comment.thumbnailUrl != null -> AsyncImage(
+                        model = comment.thumbnailUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .padding(top = topPad)
+                            .sizeIn(maxWidth = 240.dp, maxHeight = 240.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            // Not playable inline (desktop) falls back to opening the file.
+                            .clickable { (comment.imageUrl ?: comment.videoUrl)?.let(uri::openUri) },
+                    )
+                }
+                if (comment.html == null && comment.thumbnailUrl == null) {
+                    Text("[deleted]", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }

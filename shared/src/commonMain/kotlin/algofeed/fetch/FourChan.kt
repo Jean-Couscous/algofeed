@@ -5,7 +5,9 @@ import algofeed.data.MediaItem
 import algofeed.data.MediaKind
 import algofeed.util.Html
 import io.ktor.client.HttpClient
+import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -23,6 +25,11 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
     private val json = Json { ignoreUnknownKeys = true }
     private val hostBoard = Regex("""(?:boards\.)?4chan(?:nel)?\.org/([a-z0-9]+)""", RegexOption.IGNORE_CASE)
     private val shorthand = Regex("""^4chan:([a-z0-9]+)$""", RegexOption.IGNORE_CASE)
+    private val threadPath = Regex("""4chan(?:nel)?\.org/([a-z0-9]+)/thread/(\d+)""", RegexOption.IGNORE_CASE)
+
+    /** (board, thread number) from a thread's web URL. */
+    private fun parseThreadUrl(url: String): Pair<String, Long>? =
+        threadPath.find(url)?.let { it.groupValues[1].lowercase() to it.groupValues[2].toLong() }
 
     private fun board(input: String): String? =
         shorthand.matchEntire(input.trim())?.groupValues?.get(1)?.lowercase()
@@ -44,7 +51,41 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
     override suspend fun fetch(feed: Feed): FetchResult {
         val board = board(feed.siteUrl ?: feed.url) ?: Regex("""a\.4cdn\.org/([a-z0-9]+)/""").find(feed.url)?.groupValues?.get(1)
             ?: throw FetchException("Not a 4chan board")
-        return FetchResult.Fetched(parseCatalog(client.getOk(feed.url).bodyAsText(), board))
+        // a.4cdn.org honours If-Modified-Since, so an unchanged catalog comes back 304 with no body.
+        val response = client.getOk(feed.url) {
+            feed.etag?.let { header(HttpHeaders.IfNoneMatch, it) }
+            feed.lastModified?.let { header(HttpHeaders.IfModifiedSince, it) }
+        }
+        if (response.status.value == 304) return FetchResult.NotModified
+        return FetchResult.Fetched(
+            entries = parseCatalog(response.bodyAsText(), board),
+            etag = response.headers[HttpHeaders.ETag],
+            lastModified = response.headers[HttpHeaders.LastModified],
+        )
+    }
+
+    /** The replies to one thread, read-only, from the keyless JSON API. The OP is shown by the reader. */
+    suspend fun thread(threadUrl: String): CommentThread {
+        val (board, no) = parseThreadUrl(threadUrl) ?: throw FetchException("Not a 4chan thread")
+        val posts = json.parseToJsonElement(client.getOk("https://a.4cdn.org/$board/thread/$no.json").bodyAsText())
+            .jsonObject["posts"]?.jsonArray.orEmpty()
+        // The first post is the OP; the rest are replies, flat (4chan has no reply tree).
+        return CommentThread(posts.drop(1).map { post ->
+            val o = post.jsonObject
+            val tim = o["tim"]?.jsonPrimitive?.longOrNull
+            val ext = o.str("ext")
+            val file = if (tim != null && ext != null) "https://i.4cdn.org/$board/$tim$ext" else null
+            val isVideo = ext == ".webm" || ext == ".mp4"
+            Comment(
+                id = o["no"]?.jsonPrimitive?.longOrNull ?: 0,
+                author = o.str("name"),
+                html = o.str("com"),
+                time = (o["time"]?.jsonPrimitive?.longOrNull ?: 0) * 1000,
+                imageUrl = file?.takeUnless { isVideo },
+                videoUrl = file?.takeIf { isVideo },
+                thumbnailUrl = if (tim != null && ext != null) "https://i.4cdn.org/$board/${tim}s.jpg" else null,
+            )
+        })
     }
 
     fun parseCatalog(body: String, board: String): List<EntryDraft> {
@@ -67,7 +108,9 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
                     commentsUrl = threadUrl,
                     author = o.str("name")?.takeUnless { it == "Anonymous" },
                     contentHtml = com,
-                    thumbnailUrl = media.firstOrNull()?.thumbnailUrl,
+                    // 4chan serves only a 250px thumbnail or the full file; for a still image the card
+                    // shows the full file (Coil downsamples it to the card and caches it for the reader).
+                    thumbnailUrl = media.firstOrNull()?.let { if (it.kind == MediaKind.IMAGE) it.url else it.thumbnailUrl },
                     media = media,
                 )
             }

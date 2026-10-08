@@ -1,6 +1,6 @@
 package algofeed.fetch
 
-/** A comment from a Hacker News discussion thread. */
+/** A comment from a discussion thread. */
 data class Comment(
     val id: Long,
     /** Null for deleted comments. */
@@ -8,6 +8,10 @@ data class Comment(
     val html: String?,
     val time: Long,
     val children: List<Comment> = emptyList(),
+    /** An attachment (4chan): [thumbnailUrl] previews it; [imageUrl] or [videoUrl] is the full file. */
+    val imageUrl: String? = null,
+    val videoUrl: String? = null,
+    val thumbnailUrl: String? = null,
 )
 
 data class CommentThread(

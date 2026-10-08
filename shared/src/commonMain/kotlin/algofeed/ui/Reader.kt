@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +51,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,6 +85,23 @@ fun ReaderPane(
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var commentsTop by remember { mutableStateOf(0) }
+    // Root-space Y of each visible comment, and of the scroll viewport, so a 4chan >>post link can jump.
+    val postPositions = remember(entry?.id) { mutableMapOf<Long, Float>() }
+    var viewportTop by remember { mutableStateOf(0f) }
+    val opId = entry?.remoteId?.toLongOrNull()
+    val quoteUri = remember(entry?.id, uri) {
+        object : UriHandler {
+            override fun openUri(url: String) {
+                val id = QUOTE_LINK.find(url)?.groupValues?.get(1)?.toLongOrNull()
+                val target = when {
+                    id == null -> null
+                    id == opId -> 0 // the OP sits at the top of the reader
+                    else -> postPositions[id]?.let { (it - viewportTop + scroll.value).toInt().coerceAtLeast(0) }
+                }
+                if (target != null) scope.launch { scroll.animateScrollTo(target) } else uri.openUri(url)
+            }
+        }
+    }
     LaunchedEffect(entry?.id, reader.url) { scroll.scrollTo(0) }
     Column(modifier.fillMaxSize()) {
         Row(
@@ -123,7 +143,12 @@ fun ReaderPane(
             }
         }
         if (reader.loading) LinearProgressIndicator(Modifier.fillMaxWidth()) else HorizontalDivider(color = LocalExtraColors.current.divider)
-        Box(Modifier.fillMaxSize().mouseScrolling(scroll).verticalScroll(scroll), contentAlignment = Alignment.TopCenter) {
+        Box(
+            Modifier.fillMaxSize().onGloballyPositioned { viewportTop = it.positionInRoot().y }
+                .mouseScrolling(scroll).verticalScroll(scroll),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+          CompositionLocalProvider(LocalUriHandler provides quoteUri) {
             Column(
                 Modifier.widthIn(max = 700.dp).fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
@@ -141,6 +166,8 @@ fun ReaderPane(
                     feed?.title,
                     (entry?.author ?: reader.article?.byline)?.takeIf { it != feed?.title },
                     entry?.let { relativeTime(it.sortDate) + " ago" },
+                    // 4chan posts are referenced by their number, so show the OP's.
+                    entry?.takeIf { feed?.type == "4chan" }?.let { "No. ${it.remoteId}" },
                 ).joinToString("  /  ")
                 if (byline.isNotEmpty()) {
                     Text(byline, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -195,10 +222,14 @@ fun ReaderPane(
                 if (reader.comments != null && comments != null) {
                     // The column's top padding is above this position, which suits the scroll target.
                     Box(Modifier.onGloballyPositioned { commentsTop = it.positionInParent().y.toInt() }) {
-                        CommentsSection(reader.comments, comments, onOpenThread = { onExternal(); uri.openUri(reader.comments.threadUrl) })
+                        CommentsSection(reader.comments, comments, positions = postPositions, onOpenThread = { onExternal(); uri.openUri(reader.comments.threadUrl) })
                     }
                 }
             }
+          }
         }
     }
 }
+
+/** A 4chan quote link resolves to the post's anchor, e.g. .../thread/123#p456. */
+private val QUOTE_LINK = Regex("""#p(\d+)""")

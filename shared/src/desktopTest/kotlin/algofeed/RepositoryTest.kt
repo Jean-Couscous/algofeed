@@ -56,6 +56,13 @@ class RepositoryTest {
         assertEquals(1, repo.stream(StreamView.Favorites, Settings()).size)
     }
 
+    @Test fun homeNewestFirstByDefault() = runTest {
+        repo.addFeed("https://blog.example/feed")
+        repo.addFeed("hn")
+        val dates = repo.stream(StreamView.Home, Settings()).map { it.entry.sortDate }
+        assertEquals(dates.sortedDescending(), dates)
+    }
+
     @Test fun refreshReportsProgressPerFeed() = runTest {
         db.feeds().insert(algofeed.data.Feed(type = "rss", url = "https://blog.example/feed", title = "Blog", createdAt = 0))
         db.feeds().insert(algofeed.data.Feed(type = "hn", url = "https://hnrss.org/frontpage", title = "HN", createdAt = 0))
