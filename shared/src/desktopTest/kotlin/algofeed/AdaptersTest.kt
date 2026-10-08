@@ -160,6 +160,17 @@ class AdaptersTest {
         assertEquals("https://preview.redd.it/m1-small.jpg", e.thumbnailUrl)
     }
 
+    @Test fun redditVideo() = runTest {
+        val (_, entries) = fetchAll(mapOf("https://www.reddit.com/r/x/.json" to Fixtures.redditVideo), "r/x")
+        val e = entries.single()
+        val m = e.media.single()
+        assertEquals(MediaKind.VIDEO, m.kind)
+        assertEquals("https://v.redd.it/abc/DASH_720.mp4?source=fallback", m.url)
+        // HLS carries audio and is preferred over DASH for inline playback.
+        assertEquals("https://v.redd.it/abc/HLSPlaylist.m3u8", m.streamUrl)
+        assertEquals("https://b.thumbs.redditmedia.com/t.jpg", m.thumbnailUrl)
+    }
+
     @Test fun bluesky() = runTest {
         val (feed, entries) = fetchAll(
             mapOf("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed" to Fixtures.bluesky),
@@ -194,6 +205,35 @@ class AdaptersTest {
         val e = entries.single()
         assertEquals("Vol. 2 Ch. 15 — The Duel", e.title)
         assertEquals("https://mangadex.org/chapter/chap-1", e.url)
+    }
+
+    @Test fun mangadexFollowsNeedsLogin() = runTest {
+        val sources = defaultSources(Fixtures.client(emptyMap()))
+        val info = sources.resolve("mangadex:follows")
+        assertEquals("mangadex-follows", info.type)
+        assertEquals("https://api.mangadex.org/user/follows/manga/feed?limit=30&order[publishAt]=desc", info.url)
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        // Not logged in: fails cleanly rather than fetching.
+        assertFailsWith<algofeed.fetch.FetchException> { sources.forFeed(feed).fetch(feed) }
+    }
+
+    @Test fun mangadexFollowsWithLogin() = runTest {
+        val routes = mapOf(
+            "https://auth.mangadex.org/realms/mangadex/protocol/openid-connect/token" to
+                """{"access_token":"tok","refresh_token":"r2","expires_in":900}""",
+            "https://api.mangadex.org/user/follows/manga/feed" to Fixtures.mangadex,
+        )
+        val secrets = mapOf(
+            SecretStore.MANGADEX_CLIENT_ID to "id",
+            SecretStore.MANGADEX_CLIENT_SECRET to "secret",
+            SecretStore.MANGADEX_REFRESH_TOKEN to "r1",
+        )
+        val sources = defaultSources(Fixtures.client(routes)) { secrets[it] }
+        val info = sources.resolve("mangadex:follows")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        val result = sources.forFeed(feed).fetch(feed)
+        assertIs<FetchResult.Fetched>(result)
+        assertEquals("Vol. 2 Ch. 15 — The Duel", result.entries.single().title)
     }
 
     @Test fun tumblrNeedsAKey() = runTest {

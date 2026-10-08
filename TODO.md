@@ -1,2 +1,2 @@
-- Mangadex: followed-manga updates feed (needs OAuth — a personal client id/secret plus login; the public per-title feed is done)
-- Reddit/4chan videos play in the browser only; no inline playback
+- Inline video plays on Android only; desktop still opens Reddit/4chan videos in the browser (avoids a system media stack dependency — GStreamer/mpv/VLC)
+- MangaDex followed feed and inline video are built but not yet verified on a device; see PLAN.md

@@ -2,6 +2,7 @@ package algofeed.ui
 
 import algofeed.data.Entry
 import algofeed.data.Feed
+import algofeed.data.MediaCodec
 import algofeed.rank.Breakdown
 import algofeed.rank.Ranked
 import algofeed.util.Html
@@ -49,6 +50,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,6 +90,23 @@ fun EntryList(
     /** Rows are centred at this width when the list is wider. */
     maxItemWidth: Dp = Dp.Unspecified,
 ) {
+    val videoIds = remember(items) {
+        if (!inlineVideoSupported) emptySet()
+        else items.mapNotNull { r -> r.entry.id.takeIf { MediaCodec.firstVideo(r.entry.media) != null } }.toSet()
+    }
+    val activeVideoId by remember(videoIds) {
+        derivedStateOf {
+            if (videoIds.isEmpty()) null
+            else {
+                val info = listState.layoutInfo
+                val center = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                val videos = info.visibleItemsInfo
+                    .filter { it.key in videoIds }
+                    .map { VisibleVideo(it.key as Long, it.offset, it.offset + it.size) }
+                activeVideoKey(videos, center)
+            }
+        }
+    }
     LazyColumn(modifier.mouseScrolling(listState), state = listState, contentPadding = contentPadding) {
         itemsIndexed(items, key = { _, r -> r.entry.id }) { index, ranked ->
             Column(Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = maxItemWidth).fillMaxWidth()) {
@@ -96,6 +115,7 @@ fun EntryList(
                     feed = feeds[ranked.entry.feedId],
                     highlighted = index == focused || ranked.entry.id == openId,
                     showWhy = showWhy,
+                    autoPlayVideo = ranked.entry.id == activeVideoId,
                     onOpen = { onOpen(ranked.entry) },
                     onExternal = { onExternal(ranked.entry) },
                     onFavorite = { onFavorite(ranked.entry) },
@@ -116,6 +136,7 @@ private fun EntryRow(
     feed: Feed?,
     highlighted: Boolean,
     showWhy: Boolean,
+    autoPlayVideo: Boolean,
     onOpen: () -> Unit,
     onExternal: () -> Unit,
     onFavorite: () -> Unit,
@@ -186,7 +207,20 @@ private fun EntryRow(
                     modifier = Modifier.padding(top = if (entry.title != null) 4.dp else 0.dp),
                 )
             }
-            entry.thumbnailUrl?.let { CardImage(it, Modifier.padding(top = 10.dp, end = 8.dp)) }
+            val video = remember(entry.id, entry.media) { if (inlineVideoSupported) MediaCodec.firstVideo(entry.media) else null }
+            if (video != null) {
+                InlineVideo(
+                    url = video.streamUrl ?: video.url,
+                    thumbnailUrl = video.thumbnailUrl ?: entry.thumbnailUrl,
+                    autoPlay = autoPlayVideo,
+                    muted = true,
+                    showControls = false,
+                    modifier = Modifier.padding(top = 10.dp, end = 8.dp),
+                    onClick = onOpen,
+                )
+            } else {
+                entry.thumbnailUrl?.let { CardImage(it, Modifier.padding(top = 10.dp, end = 8.dp)) }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
             entry.commentsUrl?.let { comments ->
@@ -330,6 +364,17 @@ private fun CardImage(url: String, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/** A visible video card: [key] identifies it, [top]/[bottom] are its bounds in the viewport's coordinates. */
+class VisibleVideo<K>(val key: K, val top: Int, val bottom: Int)
+
+/**
+ * The one video that should autoplay: the card straddling [viewportCenter], else the nearest. Pure,
+ * so it can be unit-tested apart from the list.
+ */
+fun <K> activeVideoKey(videos: List<VisibleVideo<K>>, viewportCenter: Int): K? =
+    videos.firstOrNull { viewportCenter in it.top until it.bottom }?.key
+        ?: videos.minByOrNull { kotlin.math.abs((it.top + it.bottom) / 2 - viewportCenter) }?.key
 
 object CardImageShape {
     /** Portrait and square images get this box; anything wider keeps its own shape. */

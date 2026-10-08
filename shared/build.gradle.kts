@@ -68,6 +68,11 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.core.ktx)
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.exoplayer.dash)
+            implementation(libs.media3.exoplayer.hls)
+            implementation(libs.media3.datasource.okhttp)
+            implementation(libs.media3.ui)
         }
         val desktopTest by getting {
             dependencies {

@@ -69,6 +69,8 @@ class Repository(
     private val defaults: Settings = Settings(),
     /** Hacker News account actions; null hides them. */
     private val hackerNews: HackerNews? = null,
+    /** MangaDex OAuth; null hides the login and the followed feed can't authenticate. */
+    private val mangadexAuth: algofeed.fetch.MangadexAuth? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val profileMutex = Mutex()
@@ -120,6 +122,33 @@ class Repository(
     }
 
     suspend fun hnLogout() = setHnSession("")
+
+    // --- MangaDex account
+
+    val hasMangadex: Boolean get() = mangadexAuth != null
+
+    suspend fun mangadexUser(): String? =
+        secret(SecretStore.MANGADEX_REFRESH_TOKEN)?.let { secret(SecretStore.MANGADEX_USER) ?: "MangaDex" }
+
+    /** Returns an error message, or null once logged in. */
+    suspend fun mangadexLogin(clientId: String, clientSecret: String, user: String, password: String): String? {
+        val auth = mangadexAuth ?: return "MangaDex isn't available"
+        return runCatchingCancellable {
+            val refresh = auth.login(clientId.trim(), clientSecret.trim(), user.trim(), password)
+            setSecret(SecretStore.MANGADEX_CLIENT_ID, clientId.trim())
+            setSecret(SecretStore.MANGADEX_CLIENT_SECRET, clientSecret.trim())
+            setSecret(SecretStore.MANGADEX_REFRESH_TOKEN, refresh)
+            setSecret(SecretStore.MANGADEX_USER, user.trim())
+        }.fold(onSuccess = { null }, onFailure = { it.message ?: "Login failed" })
+    }
+
+    suspend fun mangadexLogout() {
+        mangadexAuth?.forget()
+        setSecret(SecretStore.MANGADEX_CLIENT_ID, "")
+        setSecret(SecretStore.MANGADEX_CLIENT_SECRET, "")
+        setSecret(SecretStore.MANGADEX_REFRESH_TOKEN, "")
+        setSecret(SecretStore.MANGADEX_USER, "")
+    }
 
     suspend fun hnThread(itemId: Long): CommentThread = hackerNews!!.thread(itemId, hnSession())
 

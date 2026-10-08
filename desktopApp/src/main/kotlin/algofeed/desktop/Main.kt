@@ -65,6 +65,7 @@ fun main() {
     val repo = Repository(
         db, defaultSources(client, secrets), createReaderExtractor(client),
         hackerNews = HackerNews(client),
+        mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
     )
 
     application {

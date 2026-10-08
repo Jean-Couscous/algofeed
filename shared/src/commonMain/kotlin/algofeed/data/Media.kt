@@ -13,6 +13,8 @@ data class MediaItem(
     val kind: MediaKind,
     val thumbnailUrl: String? = null,
     val caption: String? = null,
+    /** For video: a muxed stream (DASH/HLS) with audio, when [url] is a separate track. Null means [url] plays as-is. */
+    val streamUrl: String? = null,
 )
 
 /**
@@ -27,4 +29,7 @@ object MediaCodec {
 
     fun decode(raw: String?): List<MediaItem> =
         if (raw.isNullOrBlank()) emptyList() else runCatching { json.decodeFromString(serializer, raw) }.getOrDefault(emptyList())
+
+    /** The entry's first video attachment, if any; used by cards to decide whether to play inline. */
+    fun firstVideo(raw: String?): MediaItem? = decode(raw).firstOrNull { it.kind == MediaKind.VIDEO }
 }

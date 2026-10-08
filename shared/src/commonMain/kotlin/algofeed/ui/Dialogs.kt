@@ -312,6 +312,73 @@ private fun HnAccountSection(hn: HnAccountActions) {
     ) { Text(if (working) "Logging in…" else "Log in") }
 }
 
+/** MangaDex login for the Settings dialog. */
+class MangadexAccountActions(
+    /** The logged-in username, or null. */
+    val user: suspend () -> String?,
+    /** Returns an error message, or null once logged in. */
+    val login: suspend (clientId: String, clientSecret: String, user: String, password: String) -> String?,
+    val logout: suspend () -> Unit,
+)
+
+@Composable
+private fun MangadexAccountSection(md: MangadexAccountActions) {
+    Section("MangaDex account")
+    var user by remember { mutableStateOf<String?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { user = md.user(); loaded = true }
+    val scope = rememberCoroutineScope()
+    if (!loaded) return
+    user?.let { name ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Logged in as $name", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { scope.launch { md.logout(); user = null } }) { Text("Log out") }
+        }
+        return
+    }
+    Text(
+        "Follow your MangaDex list with the shorthand mangadex:follows. It needs a personal API client — create " +
+            "one under Settings → API Clients on mangadex.org, then log in below. The client id, secret and your " +
+            "password are kept on this device only.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    var clientId by remember { mutableStateOf("") }
+    var clientSecret by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    OutlinedTextField(clientId, { clientId = it }, label = { Text("Client ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(
+        clientSecret, { clientSecret = it },
+        label = { Text("Client secret") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(
+        password, { password = it },
+        label = { Text("Password") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+    OutlinedButton(
+        enabled = clientId.isNotBlank() && clientSecret.isNotBlank() && username.isNotBlank() && password.isNotEmpty() && !working,
+        onClick = {
+            working = true
+            scope.launch {
+                error = md.login(clientId, clientSecret, username, password)
+                working = false
+                if (error == null) { password = ""; user = md.user() }
+            }
+        },
+    ) { Text(if (working) "Logging in…" else "Log in") }
+}
+
 @Composable
 fun SettingsDialog(
     settings: Settings,
@@ -325,6 +392,7 @@ fun SettingsDialog(
     onExportBackup: () -> Unit,
     onRemoveAllAndReset: suspend () -> Unit,
     hn: HnAccountActions?,
+    mangadex: MangadexAccountActions?,
     sourceKeys: SourceKeyActions,
     onDismiss: () -> Unit,
 ) {
@@ -383,6 +451,11 @@ fun SettingsDialog(
         hn?.let {
             HorizontalDivider()
             HnAccountSection(it)
+        }
+
+        mangadex?.let {
+            HorizontalDivider()
+            MangadexAccountSection(it)
         }
 
         HorizontalDivider()

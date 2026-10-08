@@ -158,16 +158,28 @@ fun ReaderPane(
                     )
                 }
                 media.forEach { item ->
-                    AsyncImage(
-                        model = if (item.kind == MediaKind.VIDEO) item.thumbnailUrl ?: item.url else item.url,
-                        contentDescription = item.caption ?: entry?.title,
-                        contentScale = ContentScale.FillWidth,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
-                    )
+                    if (item.kind == MediaKind.VIDEO && inlineVideoSupported) {
+                        InlineVideo(
+                            url = item.streamUrl ?: item.url,
+                            thumbnailUrl = item.thumbnailUrl,
+                            autoPlay = false,
+                            muted = false,
+                            showControls = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = null,
+                        )
+                    } else {
+                        AsyncImage(
+                            model = if (item.kind == MediaKind.VIDEO) item.thumbnailUrl ?: item.url else item.url,
+                            contentDescription = item.caption ?: entry?.title,
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                        )
+                    }
                     item.caption?.let { c ->
                         Text(c, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (item.kind == MediaKind.VIDEO) {
+                    if (item.kind == MediaKind.VIDEO && !inlineVideoSupported) {
                         TextButton(onClick = { onExternal(); uri.openUri(item.url) }) { Text("Play the video in the browser") }
                     }
                 }

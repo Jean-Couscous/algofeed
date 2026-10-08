@@ -447,6 +447,16 @@ class AlgofeedViewModel(
 
     val hasHackerNews get() = repo.hasHackerNews
 
+    val hasMangadex get() = repo.hasMangadex
+
+    suspend fun mangadexUser(): String? = repo.mangadexUser()
+
+    /** Returns an error message, or null once logged in. */
+    suspend fun mangadexLogin(clientId: String, clientSecret: String, user: String, password: String): String? =
+        repo.mangadexLogin(clientId, clientSecret, user, password)
+
+    suspend fun mangadexLogout() = repo.mangadexLogout()
+
     /** Switches between the feed's own HTML and the extracted article. */
     fun toggleReaderSource() {
         val reader = _state.value.reader

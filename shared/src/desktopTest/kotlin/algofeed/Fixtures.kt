@@ -66,6 +66,12 @@ object Fixtures {
             "m2":{"status":"valid","e":"Image","s":{"u":"https://i.redd.it/m2.jpg"},"p":[]}}}}
     ]}}"""
 
+    val redditVideo = """{"kind":"Listing","data":{"children":[
+        {"kind":"t3","data":{"name":"t3_vid","title":"A clip","permalink":"/r/x/comments/vid/clip/","url":"https://v.redd.it/abc","is_self":false,"author":"amy","created_utc":1791281000.0,
+          "thumbnail":"https://b.thumbs.redditmedia.com/t.jpg",
+          "media":{"reddit_video":{"fallback_url":"https://v.redd.it/abc/DASH_720.mp4?source=fallback","hls_url":"https://v.redd.it/abc/HLSPlaylist.m3u8","dash_url":"https://v.redd.it/abc/DASHPlaylist.mpd"}}}}
+    ]}}"""
+
     val bluesky = """{"feed":[
         {"post":{"uri":"at://did:plc:abc/app.bsky.feed.post/xyz","author":{"handle":"alice.bsky.social","displayName":"Alice"},
           "record":{"text":"hello bsky","createdAt":"2026-10-06T10:00:00Z"},

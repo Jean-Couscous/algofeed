@@ -27,12 +27,14 @@ class AlgofeedApplication : Application(), RefreshHost {
         val db = Room.databaseBuilder<AppDatabase>(this, getDatabasePath("algofeed.db").absolutePath).buildAlgofeed()
         val client = createHttpClient()
         val secretStore = KeystoreSecretStore(secretsDataStore)
+        val secrets = algofeed.SecretReader { secretStore.secret(it) }
         Repository(
-            db, defaultSources(client) { secretStore.secret(it) }, createReaderExtractor(client),
+            db, defaultSources(client, secrets), createReaderExtractor(client),
             secrets = secretStore,
             // Hourly by default to spare the battery; the user can lower it to WorkManager's 15 minutes.
             defaults = Settings(refreshMinutes = 60),
             hackerNews = HackerNews(client),
+            mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
         )
     }
 

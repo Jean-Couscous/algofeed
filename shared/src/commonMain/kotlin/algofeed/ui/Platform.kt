@@ -31,3 +31,21 @@ expect val dynamicColorSupported: Boolean
 /** The system's wallpaper-based scheme (Android 12+), or null where there is none. */
 @androidx.compose.runtime.Composable
 expect fun dynamicColorScheme(dark: Boolean): androidx.compose.material3.ColorScheme?
+
+/** Whether [InlineVideo] plays here; false falls back to opening the video in the browser. */
+expect val inlineVideoSupported: Boolean
+
+/**
+ * Plays a video inline. [url] is the direct file; [streamUrl]-style muxed streams are passed as [url]
+ * by the caller. [onClick] (when set) handles taps instead of the player's own controls.
+ */
+@androidx.compose.runtime.Composable
+expect fun InlineVideo(
+    url: String,
+    thumbnailUrl: String?,
+    autoPlay: Boolean,
+    muted: Boolean,
+    showControls: Boolean,
+    modifier: androidx.compose.ui.Modifier,
+    onClick: (() -> Unit)?,
+)

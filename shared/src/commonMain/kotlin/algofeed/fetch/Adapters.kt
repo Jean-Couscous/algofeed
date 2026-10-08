@@ -303,10 +303,13 @@ class RedditAdapter(
                 MediaItem(url, if (gif != null) MediaKind.GIF else MediaKind.IMAGE, thumbnailUrl = thumb, caption = o.str("caption"))
             }
         }
-        d["media"]?.jsonObject?.get("reddit_video")?.jsonObject?.str("fallback_url")?.let { video ->
+        d["media"]?.jsonObject?.get("reddit_video")?.jsonObject?.let { rv ->
+            val video = rv.str("fallback_url") ?: return@let
             val thumb = d.str("thumbnail")?.takeIf { it.startsWith("http") }
                 ?: d["preview"]?.jsonObject?.get("images")?.jsonArray?.firstOrNull()?.jsonObject?.get("source")?.jsonObject?.str("url")
-            return listOf(MediaItem(video, MediaKind.VIDEO, thumbnailUrl = thumb))
+            // fallback_url is video-only; the HLS/DASH manifest carries audio for inline playback.
+            val stream = rv.str("hls_url") ?: rv.str("dash_url")
+            return listOf(MediaItem(video, MediaKind.VIDEO, thumbnailUrl = thumb, streamUrl = stream))
         }
         return emptyList()
     }
@@ -352,6 +355,7 @@ fun defaultSources(client: HttpClient, secrets: algofeed.SecretReader? = null): 
             BlueskyAdapter(client),
             FourChanAdapter(client),
             TumblrAdapter(client, secrets),
+            MangadexFollowsAdapter(client, MangadexAuth(client, secrets)),
             MangadexAdapter(client),
             rss,
         ),

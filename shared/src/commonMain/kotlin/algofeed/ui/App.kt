@@ -366,6 +366,7 @@ private fun AppContent(
             onExportBackup = { vm.exportBackup(platform) },
             onRemoveAllAndReset = vm::removeAllAndReset,
             hn = if (vm.hasHackerNews) HnAccountActions(state.hnUser, vm::hnLogin, vm::hnLogout) else null,
+            mangadex = if (vm.hasMangadex) MangadexAccountActions(vm::mangadexUser, vm::mangadexLogin, vm::mangadexLogout) else null,
             sourceKeys = SourceKeyActions(vm::sourceKey, vm::setSourceKey),
             onDismiss = { dialog = null },
         )
