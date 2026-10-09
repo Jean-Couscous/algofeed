@@ -111,7 +111,10 @@ dependencies {
 // --- embedding model asset ---
 // The ~112 MB model is fetched at build time (never committed to the public repo) and converted to a
 // compact SentencePiece vocab. Both app modules bundle shared/build/embedding as their model assets.
+// Android reads a flat assets dir; Compose Desktop's appResourcesRootDir only collects files under a
+// `common` (or per-OS) subdirectory, so the task writes both layouts.
 val embeddingAssets = layout.buildDirectory.dir("embedding")
+val embeddingResources = layout.buildDirectory.dir("embedding-desktop")
 
 tasks.register("prepareEmbeddingAssets") {
     description = "Downloads the multilingual-e5-small ONNX model and builds its SentencePiece vocab."
@@ -119,9 +122,11 @@ tasks.register("prepareEmbeddingAssets") {
     val modelSha = "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"
     val tokSha = "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
     val outDir = embeddingAssets
+    val desktopDir = embeddingResources
     inputs.property("modelSha", modelSha)
     inputs.property("tokSha", tokSha)
     outputs.dir(outDir)
+    outputs.dir(desktopDir)
     doLast {
         fun sha256Of(file: File): String {
             val md = MessageDigest.getInstance("SHA-256")
@@ -151,5 +156,10 @@ tasks.register("prepareEmbeddingAssets") {
         val code = proc.waitFor()
         tokJson.delete()
         check(code == 0) { "vocab conversion failed (exit $code):\n$log" }
+        // Desktop layout: Compose collects appResourcesRootDir/common/*.
+        val common = File(desktopDir.get().asFile, "common").apply { mkdirs() }
+        for (name in listOf("model_quantized.onnx", "tokenizer.vocab")) {
+            File(dir, name).copyTo(File(common, name), overwrite = true)
+        }
     }
 }

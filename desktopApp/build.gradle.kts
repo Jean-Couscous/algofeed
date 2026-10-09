@@ -27,8 +27,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "algofeed"
-            // Bundles the embedding model + vocab; at runtime they are at compose.application.resources.dir.
-            appResourcesRootDir.set(project(":shared").layout.buildDirectory.dir("embedding"))
+            // Bundles the embedding model + vocab (from the common/ subdir); at runtime they are at
+            // compose.application.resources.dir.
+            appResourcesRootDir.set(project(":shared").layout.buildDirectory.dir("embedding-desktop"))
             // CI passes -Palgofeed.versionName so desktop packages carry the release's version.
             packageVersion = providers.gradleProperty("algofeed.versionName").orNull ?: "0.1.0"
             // From suggestRuntimeModules, plus jdk.crypto.ec: HTTPS key exchange on Java 21 needs it,

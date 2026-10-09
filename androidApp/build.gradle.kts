@@ -59,8 +59,10 @@ android {
     }
 }
 
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(":shared:prepareEmbeddingAssets") }
+// preBuild anchors the whole variant build, so asset merging, lint and packaging all run after the
+// model is fetched. (A narrower merge*Assets dependency misses the lint-vital task, which also reads
+// the assets dir and fails Gradle's strict input/output validation on release builds.)
+tasks.named("preBuild") { dependsOn(":shared:prepareEmbeddingAssets") }
 
 dependencies {
     implementation(project(":shared"))
