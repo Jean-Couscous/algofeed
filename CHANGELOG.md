@@ -1,10 +1,5 @@
 # Changelog
 
-All notable changes to Algofeed are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
-## [Unreleased]
-
 ### Added
 - Back-to-top button on touch devices, shown once the list is scrolled down a few rows.
 - Source link in the full-screen media viewer: opens the post's discussion in the in-app reader when it has one, otherwise the source page in the browser.
