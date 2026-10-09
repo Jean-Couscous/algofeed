@@ -1,5 +1,1 @@
-- Image and video viewer inside app. Classic popup on click.
-- Media tab in sidebar
-- Reddit feed often failed to update, pinpoint the problem.
-- Hide algo config from settings, hardcode a default similar to twitter
-- Try to fully integrate "Newest first" into the algo
+- Proper embedding model integration? https://timkellogg.me/blog/2024/01/03/birb
