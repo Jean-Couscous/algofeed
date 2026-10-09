@@ -49,6 +49,7 @@ sealed interface StreamView {
     data object Home : StreamView
     data object Favorites : StreamView
     data object Bookmarks : StreamView
+    data object Media : StreamView
     data class OfFeed(val feedId: Long) : StreamView
     data class OfFolder(val folderId: Long) : StreamView
     data class Search(val query: String) : StreamView
@@ -313,12 +314,11 @@ class Repository(
             StreamView.Home -> {
                 val since = clock() - settings.retentionDays * DAY_MS
                 val candidates = if (settings.includeSeen) entries.candidatesIncludingSeen(since) else entries.candidates(since)
-                // Twitter-style: show newest first while the profile still learns from the user's signals.
-                if (settings.chronologicalHome) candidates.sortedByDescending { it.sortDate }.unranked()
-                else rank(candidates, settings)
+                rank(candidates, settings)
             }
             StreamView.Favorites -> entries.favorites().unranked()
             StreamView.Bookmarks -> entries.bookmarks().unranked()
+            StreamView.Media -> entries.withMedia().unranked()
             is StreamView.OfFeed -> entries.byFeed(view.feedId).unranked()
             is StreamView.OfFolder -> entries.byFolder(view.folderId).unranked()
             is StreamView.Search -> entries.search(view.query).unranked()
@@ -327,6 +327,8 @@ class Repository(
 
     private suspend fun rank(candidates: List<Entry>, settings: Settings): List<Ranked> {
         val feeds = db.feeds().all().associateBy { it.id }
+        val authorStats = db.authorStats().forFeeds(candidates.map { it.feedId }.distinct())
+            .associateBy { it.feedId to it.author }
         val input = RankInput(
             candidates = candidates,
             feeds = feeds,
@@ -335,8 +337,9 @@ class Repository(
             documentCount = db.entries().termDocumentCount(),
             profile = profile(),
             now = clock(),
+            authorStats = authorStats,
         )
-        return withContext(Dispatchers.Default) { Ranker(settings.weights).rank(input) }
+        return withContext(Dispatchers.Default) { Ranker().rank(input) }
     }
 
     private fun List<Entry>.unranked() = map { Ranked(it, 0.0, algofeed.rank.Breakdown()) }
@@ -350,6 +353,9 @@ class Repository(
 
     // --- signals
 
+    /** The entry's author for per-author affinity, trimmed; null when the source gives no author. */
+    private fun Entry.authorKey(): String? = author?.trim()?.takeIf { it.isNotEmpty() }
+
     /** Entries scrolled past: they count as impressions and nudge the profile away from skipped topics. */
     suspend fun markViewed(entries: List<Entry>) {
         if (entries.isEmpty()) return
@@ -357,6 +363,9 @@ class Repository(
         val changed = db.entries().markViewed(entries.map { it.id }, now)
         if (changed == 0) return
         entries.groupBy { it.feedId }.forEach { (feedId, list) -> db.feeds().addStats(feedId, impressions = list.size) }
+        entries.groupBy { it.feedId to it.authorKey() }.forEach { (key, list) ->
+            key.second?.let { db.authorStats().addStats(key.first, it, impressions = list.size) }
+        }
         val skipped = entries.filter { it.openedAt == null && it.favoritedAt == null && it.bookmarkedAt == null }
         learn(skipped, Signal.SkippedPast)
     }
@@ -368,6 +377,7 @@ class Repository(
         // Opening implies seeing: it counts as an impression and leaves Home on the next load.
         val impressions = db.entries().markViewed(listOf(entry.id), now)
         db.feeds().addStats(entry.feedId, impressions = impressions, opens = 1)
+        entry.authorKey()?.let { db.authorStats().addStats(entry.feedId, it, impressions = impressions, opens = 1) }
         learn(listOf(entry), Signal.Open)
     }
 
@@ -381,6 +391,7 @@ class Repository(
     suspend fun setFavorite(entry: Entry, on: Boolean) {
         db.entries().setFavorited(entry.id, if (on) clock() else null)
         db.feeds().addStats(entry.feedId, favorites = if (on) 1 else -1)
+        entry.authorKey()?.let { db.authorStats().addStats(entry.feedId, it, favorites = if (on) 1 else -1) }
         learn(listOf(entry), if (on) Signal.Favorite else Signal.Dismiss, scale = if (on) 1.0 else 3.0)
     }
 
@@ -392,6 +403,7 @@ class Repository(
     suspend fun setDismissed(entry: Entry, on: Boolean) {
         db.entries().setDismissed(entry.id, if (on) clock() else null)
         db.feeds().addStats(entry.feedId, dismissals = if (on) 1 else -1)
+        entry.authorKey()?.let { db.authorStats().addStats(entry.feedId, it, dismissals = if (on) 1 else -1) }
         learn(listOf(entry), Signal.Dismiss, scale = if (on) 1.0 else -1.0)
     }
 
@@ -512,6 +524,9 @@ class Repository(
                     folder = f.folderId?.let(nameOf::get), bucket = f.bucket,
                     impressions = f.impressions, opens = f.opens, favorites = f.favorites, dismissals = f.dismissals,
                     preferFeedVersion = f.preferFeedVersion,
+                    authors = db.authorStats().forFeed(f.id).map {
+                        BackupAuthor(it.author, it.impressions, it.opens, it.favorites, it.dismissals)
+                    },
                 )
             },
             profile = profile(),
@@ -534,6 +549,9 @@ class Repository(
                 dismissals = bf.dismissals, preferFeedVersion = bf.preferFeedVersion, createdAt = clock(),
             )
             val saved = feed.copy(id = db.feeds().insert(feed))
+            for (a in bf.authors) {
+                db.authorStats().addStats(saved.id, a.author, a.impressions, a.opens, a.favorites, a.dismissals)
+            }
             runCatchingCancellable { refreshFeed(saved) }
             added++
         }

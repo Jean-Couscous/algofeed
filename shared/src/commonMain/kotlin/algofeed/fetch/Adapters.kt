@@ -5,6 +5,7 @@ import algofeed.data.MediaItem
 import algofeed.data.MediaKind
 import algofeed.util.Html
 import algofeed.util.nowMillis
+import kotlinx.coroutines.CancellationException
 import com.prof18.rssparser.RssParser
 import com.prof18.rssparser.model.RssChannel
 import com.prof18.rssparser.model.RssItem
@@ -217,8 +218,13 @@ class RedditAdapter(
         if (nowMillis() < jsonRefusedUntil) return null
         return try {
             client.getOk(url).bodyAsText()
-        } catch (e: FetchException) {
-            if ("HTTP 403" in (e.message ?: "")) jsonRefusedUntil = nowMillis() + JSON_RETRY_MS
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A timeout or IO error must still fall through to the RSS listing, not become a hard failure.
+            // When the network is refusing or throttling us (403/429/503), stop hammering JSON for a while.
+            val msg = e.message ?: ""
+            if (REFUSAL_CODES.any { it in msg }) jsonRefusedUntil = nowMillis() + JSON_RETRY_MS
             null
         }
     }
@@ -338,6 +344,7 @@ class RedditAdapter(
 
     private companion object {
         const val JSON_RETRY_MS = 15 * 60_000L
+        val REFUSAL_CODES = listOf("HTTP 403", "HTTP 429", "HTTP 503")
     }
 }
 

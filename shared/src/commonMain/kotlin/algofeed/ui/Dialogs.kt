@@ -407,25 +407,13 @@ fun SettingsDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
         dismissButton = null,
     ) {
-        Section("Home ordering")
-        LabeledSwitch("Newest first", settings.chronologicalHome) { onSave(settings.copy(chronologicalHome = it)) }
+        Section("Home")
         Text(
-            if (settings.chronologicalHome)
-                "Home shows the newest entries first. Algofeed still learns from what you open, favorite and " +
-                    "hide, ready for when you switch to the ranked mix."
-            else "One mix of four things. Raise Freshness to lean towards newest first, Quiet feeds to let rarely " +
-                "posting feeds rise above busy ones, and the last two to follow what you open, favorite and hide.",
+            "Home leads with the newest posts and lifts the feeds, authors and topics you open, favorite and " +
+                "hide. Tap \"Why this entry is here\" on any card to see how it was ranked.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (!settings.chronologicalHome) {
-            val w = settings.weights
-            WeightSlider("Freshness", w.recency) { onSave(settings.copy(weights = w.copy(recency = it))) }
-            WeightSlider("Quiet feeds", w.rarity) { onSave(settings.copy(weights = w.copy(rarity = it))) }
-            WeightSlider("Feeds you engage with", w.source) { onSave(settings.copy(weights = w.copy(source = it))) }
-            WeightSlider("Topics you read", w.content) { onSave(settings.copy(weights = w.copy(content = it))) }
-            TextButton(onClick = { onSave(settings.copy(weights = algofeed.rank.Weights())) }) { Text("Reset to defaults") }
-        }
         LabeledSwitch("Show entries already scrolled past", settings.includeSeen) { onSave(settings.copy(includeSeen = it)) }
 
         HorizontalDivider()
@@ -552,17 +540,6 @@ private fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect:
                 shape = SegmentedButtonDefaults.itemShape(i, options.size),
             ) { Text(label, maxLines = 1) }
         }
-    }
-}
-
-@Composable
-private fun WeightSlider(label: String, value: Double, onChange: (Double) -> Unit) {
-    Column {
-        Row {
-            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(((value * 10).toInt() / 10.0).toString(), style = MaterialTheme.typography.bodyMedium)
-        }
-        Slider(value.toFloat(), { onChange(((it * 10).toInt() / 10.0)) }, valueRange = 0f..3f)
     }
 }
 

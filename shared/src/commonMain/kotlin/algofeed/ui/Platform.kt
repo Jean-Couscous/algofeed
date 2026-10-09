@@ -32,6 +32,14 @@ expect val dynamicColorSupported: Boolean
 @androidx.compose.runtime.Composable
 expect fun dynamicColorScheme(dark: Boolean): androidx.compose.material3.ColorScheme?
 
+/** Themes right-click context menus (text selection and [MediaContextMenu]) to the app on desktop; a no-op wrapper elsewhere. */
+@androidx.compose.runtime.Composable
+expect fun StyledContextMenus(content: @androidx.compose.runtime.Composable () -> Unit)
+
+/** Desktop: a right-click menu to open, copy or save the media at [url]. Elsewhere it just renders [content]. */
+@androidx.compose.runtime.Composable
+expect fun MediaContextMenu(url: String, canSave: Boolean, content: @androidx.compose.runtime.Composable () -> Unit)
+
 /** Whether [InlineVideo] plays here; false falls back to opening the video in the browser. */
 expect val inlineVideoSupported: Boolean
 

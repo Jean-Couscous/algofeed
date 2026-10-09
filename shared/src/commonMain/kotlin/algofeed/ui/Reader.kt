@@ -5,6 +5,7 @@ import algofeed.data.MediaCodec
 import algofeed.data.MediaKind
 import algofeed.util.Urls
 import algofeed.util.relativeTime
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -70,6 +71,8 @@ fun ReaderPane(
     onBookmark: () -> Unit,
     onExternal: () -> Unit,
     onToggleSource: () -> Unit,
+    /** Opens the full-screen viewer on the entry's gallery item at this index. */
+    onOpenMedia: (Int) -> Unit = {},
     /** Set for HN stories. */
     comments: CommentActions? = null,
     modifier: Modifier = Modifier,
@@ -177,14 +180,16 @@ fun ReaderPane(
                 }
                 Spacer(Modifier.padding(top = 4.dp))
                 picture?.let {
-                    AsyncImage(
-                        model = it,
-                        contentDescription = entry?.title,
-                        contentScale = ContentScale.FillWidth,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
-                    )
+                    MediaContextMenu(it, canSave = true) {
+                        AsyncImage(
+                            model = it,
+                            contentDescription = entry?.title,
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                        )
+                    }
                 }
-                media.forEach { item ->
+                media.forEachIndexed { index, item ->
                     if (item.kind == MediaKind.VIDEO && inlineVideoSupported) {
                         InlineVideo(
                             url = item.streamUrl ?: item.url,
@@ -196,12 +201,16 @@ fun ReaderPane(
                             onClick = null,
                         )
                     } else {
-                        AsyncImage(
-                            model = if (item.kind == MediaKind.VIDEO) item.thumbnailUrl ?: item.url else item.url,
-                            contentDescription = item.caption ?: entry?.title,
-                            contentScale = ContentScale.FillWidth,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
-                        )
+                        val imageUrl = if (item.kind == MediaKind.VIDEO) item.thumbnailUrl ?: item.url else item.url
+                        MediaContextMenu(imageUrl, canSave = item.kind != MediaKind.VIDEO) {
+                            AsyncImage(
+                                model = imageUrl,
+                                contentDescription = item.caption ?: entry?.title,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                    .clickable { onOpenMedia(index) },
+                            )
+                        }
                     }
                     item.caption?.let { c ->
                         Text(c, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

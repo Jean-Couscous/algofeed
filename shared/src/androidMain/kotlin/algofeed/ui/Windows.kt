@@ -17,6 +17,13 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 actual fun fullScreenDialogProperties() = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
 
+// Right-click context menus are a desktop concept; Android uses long-press menus elsewhere.
+@Composable
+actual fun StyledContextMenus(content: @Composable () -> Unit) = content()
+
+@Composable
+actual fun MediaContextMenu(url: String, canSave: Boolean, content: @Composable () -> Unit) = content()
+
 @Composable
 actual fun SystemBarIcons(darkTheme: Boolean) {
     val view = LocalView.current

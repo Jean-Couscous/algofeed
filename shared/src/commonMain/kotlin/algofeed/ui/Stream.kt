@@ -271,6 +271,7 @@ private fun WhyPanel(b: Breakdown, score: Double) {
         Factor("Freshness", b.recency)
         Factor("Rare source", b.rarity)
         Factor("Your history with this feed", b.source)
+        if (b.author != 0.0) Factor("Authors you engage with", b.author)
         Factor("Topic match", b.content, b.topTerms.takeIf { it.isNotEmpty() }?.joinToString(", "))
         if (b.fatigue != 0.0) Factor("More from this feed above", b.fatigue)
         if (b.duplicate != 0.0) Factor("Similar to a higher entry", b.duplicate)

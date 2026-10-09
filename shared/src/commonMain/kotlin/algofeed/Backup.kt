@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class Backup(
-    val version: Int = 1,
+    val version: Int = 2,
     val settings: Settings = Settings(),
     val folders: List<BackupFolder> = emptyList(),
     val feeds: List<BackupFeed> = emptyList(),
@@ -32,4 +32,14 @@ data class BackupFeed(
     val favorites: Int = 0,
     val dismissals: Int = 0,
     val preferFeedVersion: Boolean = false,
+    val authors: List<BackupAuthor> = emptyList(),
+)
+
+@Serializable
+data class BackupAuthor(
+    val author: String,
+    val impressions: Int = 0,
+    val opens: Int = 0,
+    val favorites: Int = 0,
+    val dismissals: Int = 0,
 )

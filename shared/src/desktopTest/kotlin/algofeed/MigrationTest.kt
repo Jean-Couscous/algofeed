@@ -94,4 +94,22 @@ class MigrationTest {
         db.close()
         assertEquals("[]", media)
     }
+
+    @Test fun authorStatTableIsAddedAndDataSurvives() {
+        helper.createDatabase(6).apply {
+            execSQL(
+                """INSERT INTO feed (id, type, url, title, bucket, enabled, createdAt, impressions, opens, favorites, dismissals, preferFeedVersion)
+                   VALUES (1, 'rss', 'https://blog.example/feed', 'Blog', 0, 1, 0, 3, 2, 1, 0, 0)"""
+            )
+            execSQL("INSERT INTO entry (id, feedId, remoteId, sortDate, fetchedAt, readSeconds, media) VALUES (1, 1, 'a', 0, 0, 0, '[]')")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(7)
+        // The additive table exists and is empty; the pre-existing feed row is untouched.
+        val authorRows = db.prepare("SELECT COUNT(*) FROM author_stat").use { st -> st.step(); st.getLong(0) }
+        val opens = db.prepare("SELECT opens FROM feed WHERE id = 1").use { st -> st.step(); st.getLong(0) }
+        db.close()
+        assertEquals(0L, authorRows)
+        assertEquals(2L, opens)
+    }
 }

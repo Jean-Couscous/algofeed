@@ -7,6 +7,9 @@ import algofeed.StreamView
 import algofeed.data.Entry
 import algofeed.data.Feed
 import algofeed.data.Folder
+import algofeed.data.MediaCodec
+import algofeed.data.MediaItem
+import algofeed.data.MediaKind
 import algofeed.fetch.HackerNews
 import algofeed.fetch.HnItemPage
 import algofeed.fetch.CommentThread
@@ -45,6 +48,9 @@ data class ReaderState(
     val open get() = entry != null || url != null
 }
 
+/** Open full-screen media: a post's gallery, starting at [index]. */
+data class ViewerState(val media: List<MediaItem>, val index: Int)
+
 enum class CommentSource(val siteName: String) { HackerNews("HN"), FourChan("4chan") }
 
 /** Feed types whose entries carry everything to show; the reader renders them without extracting an article. */
@@ -78,6 +84,7 @@ data class UiState(
     val newAvailable: Int = 0,
     val focused: Int = -1,
     val reader: ReaderState = ReaderState(),
+    val viewer: ViewerState? = null,
     val settings: Settings = Settings(),
     val message: String? = null,
     /** Logged-in Hacker News user. */
@@ -499,6 +506,17 @@ class AlgofeedViewModel(
         readerJob?.cancel()
         _state.update { it.copy(reader = ReaderState()) }
     }
+
+    /** Opens the full-screen media viewer on [entry]'s gallery at [index]; falls back to the reader if it has none. */
+    fun openViewer(entry: Entry, index: Int = 0) {
+        val media = MediaCodec.decode(entry.media).ifEmpty {
+            entry.thumbnailUrl?.let { listOf(MediaItem(it, MediaKind.IMAGE)) }.orEmpty()
+        }
+        if (media.isEmpty()) return open(entry)
+        _state.update { it.copy(viewer = ViewerState(media, index.coerceIn(0, media.lastIndex))) }
+    }
+
+    fun closeViewer() = _state.update { it.copy(viewer = null) }
 
     private fun stopReadTimer() {
         val entry = _state.value.reader.entry

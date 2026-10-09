@@ -93,8 +93,10 @@ fun AlgofeedApp(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     AlgofeedTheme(state.settings.theme, state.settings.dynamicColor) {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            AppContent(vm, state, platform, sharedUrl, onSharedUrlHandled)
+        StyledContextMenus {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                AppContent(vm, state, platform, sharedUrl, onSharedUrlHandled)
+            }
         }
     }
 }
@@ -182,10 +184,11 @@ private fun AppContent(
     // Dialogs handle back themselves, ahead of this.
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = drawer.isOpen || state.reader.open || state.view != StreamView.Home,
+        isBackEnabled = drawer.isOpen || state.viewer != null || state.reader.open || state.view != StreamView.Home,
         onBackCompleted = {
             when {
                 drawer.isOpen -> scope.launch { drawer.close() }
+                vm.state.value.viewer != null -> vm.closeViewer()
                 vm.state.value.reader.open -> vm.closeReader()
                 else -> vm.show(StreamView.Home)
             }
@@ -205,7 +208,11 @@ private fun AppContent(
             Key.X -> entry?.let(vm::dismiss) ?: return false
             Key.R -> vm.refresh(manual = true)
             Key.Slash -> searchFocus.requestFocus()
-            Key.Escape -> if (state.reader.open) vm.closeReader() else return false
+            Key.Escape -> when {
+                state.viewer != null -> vm.closeViewer()
+                state.reader.open -> vm.closeReader()
+                else -> return false
+            }
             else -> return false
         }
         return true
@@ -277,6 +284,14 @@ private fun AppContent(
                             else -> "No entries here."
                         },
                     )
+                    state.view == StreamView.Media -> PullToRefresh(refreshing = state.refreshing, onRefresh = { vm.refresh(manual = true) }) {
+                        MediaGrid(
+                            items = state.items,
+                            onOpen = { vm.openViewer(it) },
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues(),
+                        )
+                    }
                     else -> PullToRefresh(refreshing = state.refreshing, onRefresh = { vm.refresh(manual = true) }) {
                         EntryList(
                             items = state.items,
@@ -312,6 +327,7 @@ private fun AppContent(
                 onBookmark = { state.reader.entry?.let(vm::toggleBookmark) },
                 onExternal = { state.reader.entry?.let(vm::openedExternally) },
                 onToggleSource = vm::toggleReaderSource,
+                onOpenMedia = { index -> state.reader.entry?.let { vm.openViewer(it, index) } },
                 comments = CommentActions(
                     loggedIn = state.hnUser != null && state.reader.comments?.source == CommentSource.HackerNews,
                     voted = { state.hnVoted(it, state.reader.comments?.thread?.page) },
@@ -354,6 +370,8 @@ private fun AppContent(
                 }
             }
         }
+
+        state.viewer?.let { MediaViewer(it.media, it.index, onClose = vm::closeViewer) }
     }
 
     when (val d = dialog) {
@@ -462,6 +480,7 @@ private fun title(view: StreamView, feeds: Map<Long, Feed>, folders: List<Folder
     StreamView.Home -> "Home"
     StreamView.Favorites -> "Favorites"
     StreamView.Bookmarks -> "Bookmarks"
+    StreamView.Media -> "Media"
     is StreamView.OfFeed -> feeds[view.feedId]?.title ?: "Feed"
     is StreamView.OfFolder -> folders.firstOrNull { it.id == view.folderId }?.name ?: "Folder"
     is StreamView.Search -> "Results for \"${view.query}\""

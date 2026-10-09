@@ -119,6 +119,11 @@ fun main(args: Array<String>): Unit = runBlocking {
         shoot("reader-narrow", 400, 820, settle = 3000)
     }
     vm.closeReader()
+
+    withContext(Dispatchers.Main) { vm.show(StreamView.Media) }
+    delay(1500)
+    shoot("media", 1320, 860, settle = 3000)
+
     db.close()
     Runtime.getRuntime().halt(0)
 }

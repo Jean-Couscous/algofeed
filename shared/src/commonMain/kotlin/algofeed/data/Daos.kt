@@ -62,6 +62,24 @@ interface FeedDao {
 }
 
 @Dao
+interface AuthorStatDao {
+    @Query(
+        """INSERT INTO author_stat(feedId, author, impressions, opens, favorites, dismissals)
+           VALUES(:feedId, :author, :impressions, :opens, :favorites, :dismissals)
+           ON CONFLICT(feedId, author) DO UPDATE SET
+             impressions = impressions + :impressions, opens = opens + :opens,
+             favorites = favorites + :favorites, dismissals = dismissals + :dismissals"""
+    )
+    suspend fun addStats(feedId: Long, author: String, impressions: Int = 0, opens: Int = 0, favorites: Int = 0, dismissals: Int = 0)
+
+    @Query("SELECT * FROM author_stat WHERE feedId IN (:feedIds)")
+    suspend fun forFeeds(feedIds: List<Long>): List<AuthorStat>
+
+    @Query("SELECT * FROM author_stat WHERE feedId = :feedId")
+    suspend fun forFeed(feedId: Long): List<AuthorStat>
+}
+
+@Dao
 interface EntryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(entries: List<Entry>): List<Long>
@@ -92,6 +110,14 @@ interface EntryDao {
 
     @Query("SELECT * FROM entry WHERE favoritedAt IS NOT NULL ORDER BY favoritedAt DESC")
     suspend fun favorites(): List<Entry>
+
+    /** Entries carrying a gallery or a thumbnail image, newest first — for the Media grid. */
+    @Query(
+        """SELECT entry.* FROM entry JOIN feed ON feed.id = entry.feedId
+           WHERE feed.enabled AND (entry.media <> '[]' OR entry.thumbnailUrl IS NOT NULL)
+           ORDER BY sortDate DESC LIMIT :limit"""
+    )
+    suspend fun withMedia(limit: Int = 500): List<Entry>
 
     @Query("SELECT * FROM entry WHERE feedId = :feedId ORDER BY sortDate DESC LIMIT :limit")
     suspend fun byFeed(feedId: Long, limit: Int = 500): List<Entry>

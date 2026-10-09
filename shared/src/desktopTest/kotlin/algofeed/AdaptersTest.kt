@@ -325,4 +325,38 @@ class AdaptersTest {
         repeat(2) { assertIs<FetchResult.Fetched>(sources.forFeed(feed).fetch(feed)) }
         assertEquals(1, requests.count { ".json" in it }, requests.toString())
     }
+
+    private val redditRss = """<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>r/x</title>
+        <entry><id>t3_a</id><title>Post</title><link href="https://www.reddit.com/r/x/comments/a/post/"/>
+        <updated>2026-10-06T10:00:00Z</updated></entry></feed>"""
+
+    @Test fun redditFallsBackToRssOnTimeout() = runTest {
+        // A transport error on the JSON path (not an HTTP status) must still reach the RSS listing.
+        val client = io.ktor.client.HttpClient(io.ktor.client.engine.mock.MockEngine { request ->
+            val url = request.url.toString()
+            if (".json" in url) throw RuntimeException("connection timed out")
+            else respond(redditRss, io.ktor.http.HttpStatusCode.OK, io.ktor.http.headersOf("Content-Type", "text/xml"))
+        })
+        val sources = defaultSources(client)
+        val info = sources.resolve("r/x")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        val result = sources.forFeed(feed).fetch(feed)
+        assertIs<FetchResult.Fetched>(result)
+        assertEquals("https://www.reddit.com/r/x/comments/a/post/", result.entries.single().url)
+    }
+
+    @Test fun redditSkipsJsonForAWhileAfterA429() = runTest {
+        val requests = mutableListOf<String>()
+        val client = io.ktor.client.HttpClient(io.ktor.client.engine.mock.MockEngine { request ->
+            val url = request.url.toString()
+            requests += url
+            if (".json" in url) respond("slow down", io.ktor.http.HttpStatusCode.TooManyRequests)
+            else respond(redditRss, io.ktor.http.HttpStatusCode.OK, io.ktor.http.headersOf("Content-Type", "text/xml"))
+        })
+        val sources = defaultSources(client)
+        val info = sources.resolve("r/x")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        repeat(2) { assertIs<FetchResult.Fetched>(sources.forFeed(feed).fetch(feed)) }
+        assertEquals(1, requests.count { ".json" in it }, requests.toString())
+    }
 }

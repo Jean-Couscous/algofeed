@@ -76,6 +76,24 @@ data class Entry(
     val extractedHtml: String? = null,
 )
 
+/** Per-author engagement counters, scoped to one feed so handles don't collide across sources. */
+@Entity(
+    tableName = "author_stat",
+    primaryKeys = ["feedId", "author"],
+    foreignKeys = [
+        ForeignKey(Feed::class, ["id"], ["feedId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("feedId")],
+)
+data class AuthorStat(
+    val feedId: Long,
+    val author: String,
+    val impressions: Int = 0,
+    val opens: Int = 0,
+    val favorites: Int = 0,
+    val dismissals: Int = 0,
+)
+
 @Entity(
     tableName = "entry_term",
     primaryKeys = ["entryId", "term"],

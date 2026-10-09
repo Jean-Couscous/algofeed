@@ -74,6 +74,17 @@ class RankerTest {
         assertTrue(loved > neutral && ignored < neutral && disliked < ignored, "$loved $ignored $disliked")
     }
 
+    @Test fun authorAffinityRewardsEngagement() {
+        fun stat(impressions: Int = 0, opens: Int = 0, favorites: Int = 0, dismissals: Int = 0) =
+            algofeed.data.AuthorStat(1, "a", impressions, opens, favorites, dismissals)
+        val neutral = Ranker.authorAffinity(stat())
+        val loved = Ranker.authorAffinity(stat(impressions = 20, opens = 15, favorites = 3))
+        val ignored = Ranker.authorAffinity(stat(impressions = 50))
+        val disliked = Ranker.authorAffinity(stat(impressions = 20, dismissals = 10))
+        assertEquals(0.0, neutral, 1e-9)
+        assertTrue(loved > neutral && ignored < neutral && disliked < ignored, "$loved $ignored $disliked")
+    }
+
     @Test fun profileBoostsMatchingContent() {
         val feeds = listOf(feed(1, 2))
         val texts = mapOf(
@@ -107,10 +118,12 @@ class RankerTest {
         }
     }
 
-    @Test fun busyFeedsDoNotBuryQuietOnes() {
+    @Test fun quietFeedsAreLiftedAmongComparablyFreshEntries() {
+        // Recency leads, but a quiet feed still gets a rarity lift, so a reasonably fresh post from a
+        // rarely-posting feed surfaces among a flood from busy feeds instead of being buried.
         val busy = (1L..2L).map { feed(it, bucket = 5) }
         val quiet = feed(9, bucket = 1)
-        val entries = (1L..40L).map { entry(it, feedId = 1 + it % 2, hoursAgo = it * 0.25) } + entry(100, 9, hoursAgo = 30.0)
+        val entries = (1L..40L).map { entry(it, feedId = 1 + it % 2, hoursAgo = it * 0.25) } + entry(100, 9, hoursAgo = 2.0)
         val order = Ranker().rank(input(entries, busy + quiet)).map { it.entry.id }
         assertTrue(order.indexOf(100L) < 8, "quiet entry at ${order.indexOf(100L)}")
     }

@@ -17,14 +17,16 @@ import kotlinx.coroutines.IO
 @Database(
     entities = [
         Folder::class, Feed::class, Entry::class, EntryTerm::class, ProfileTerm::class, Setting::class,
+        AuthorStat::class,
     ],
-    version = 6,
+    version = 7,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3, spec = PinsToBookmarks::class),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5, spec = DropAi::class),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
     ],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -32,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun folders(): FolderDao
     abstract fun feeds(): FeedDao
     abstract fun entries(): EntryDao
+    abstract fun authorStats(): AuthorStatDao
     abstract fun profile(): ProfileDao
     abstract fun settings(): SettingDao
     abstract fun reset(): ResetDao

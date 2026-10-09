@@ -5,6 +5,7 @@ import algofeed.data.buildAlgofeed
 import algofeed.fetch.defaultSources
 import algofeed.reader.Article
 import algofeed.reader.ReaderExtractor
+import algofeed.util.HOUR_MS
 import androidx.room.Room
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -56,11 +57,22 @@ class RepositoryTest {
         assertEquals(1, repo.stream(StreamView.Favorites, Settings()).size)
     }
 
-    @Test fun homeNewestFirstByDefault() = runTest {
-        repo.addFeed("https://blog.example/feed")
-        repo.addFeed("hn")
-        val dates = repo.stream(StreamView.Home, Settings()).map { it.entry.sortDate }
-        assertEquals(dates.sortedDescending(), dates)
+    @Test fun coldStartLeadsWithNewest() = runTest {
+        // With an empty profile the ranked feed should still order a single feed newest-first:
+        // recency dominates and the other factors are flat.
+        val feedId = db.feeds().insert(
+            algofeed.data.Feed(type = "rss", url = "https://blog.example/feed", title = "Blog", bucket = 2, createdAt = now)
+        )
+        db.entries().insertIgnore(
+            (0 until 5).map { i ->
+                algofeed.data.Entry(
+                    feedId = feedId, remoteId = "e$i", url = "https://blog.example/e$i", title = "Post number $i",
+                    sortDate = now - i * 6 * HOUR_MS, fetchedAt = now,
+                )
+            }
+        )
+        val order = repo.stream(StreamView.Home, Settings()).map { it.entry.sortDate }
+        assertEquals(order.sortedDescending(), order)
     }
 
     @Test fun refreshReportsProgressPerFeed() = runTest {
@@ -82,6 +94,37 @@ class RepositoryTest {
         assertTrue(repo.profile().getValue("garden") < 0)
         assertTrue(repo.stream(StreamView.Home, Settings()).none { it.entry.id == garden.id })
         assertEquals(1, db.feeds().get(feed.id)!!.dismissals)
+    }
+
+    @Test fun authorAffinityLiftsEngagedAuthorsWithinAFeed() = runTest {
+        val ranked = Settings()
+        val feedId = db.feeds().insert(
+            algofeed.data.Feed(type = "rss", url = "https://multi.example/feed", title = "Multi", bucket = 2, createdAt = now)
+        )
+        fun entry(remote: String, author: String) = algofeed.data.Entry(
+            feedId = feedId, remoteId = remote, url = "https://multi.example/$remote", title = "Post $remote",
+            author = author, sortDate = now - HOUR_MS, fetchedAt = now,
+        )
+        db.entries().insertIgnore(
+            listOf("a1", "a2", "a3").map { entry(it, "alice") } + listOf("b1", "b2", "b3").map { entry(it, "bob") }
+        )
+        val byRemote = db.entries().byFeed(feedId).associateBy { it.remoteId }
+
+        // Engage with alice, reject bob.
+        for (id in listOf("a1", "a2")) {
+            repo.markOpened(byRemote.getValue(id))
+            repo.setFavorite(byRemote.getValue(id), true)
+        }
+        for (id in listOf("b1", "b2")) repo.setDismissed(byRemote.getValue(id), true)
+
+        // The untouched entries a3 / b3 are the remaining candidates; only the author differs.
+        val home = repo.stream(StreamView.Home, ranked)
+        val a3 = home.first { it.entry.remoteId == "a3" }
+        val b3 = home.first { it.entry.remoteId == "b3" }
+        assertTrue(a3.breakdown.author > 0, "alice author factor ${a3.breakdown.author}")
+        assertTrue(b3.breakdown.author < 0, "bob author factor ${b3.breakdown.author}")
+        assertTrue(a3.score > b3.score, "a3 ${a3.score} should outrank b3 ${b3.score}")
+        assertTrue(home.indexOfFirst { it.entry.remoteId == "a3" } < home.indexOfFirst { it.entry.remoteId == "b3" })
     }
 
     @Test fun oldSettingsWithModeStillLoad() = runTest {

@@ -1,5 +1,6 @@
 package algofeed.rank
 
+import algofeed.data.AuthorStat
 import algofeed.data.Entry
 import algofeed.data.Feed
 import algofeed.util.HOUR_MS
@@ -12,10 +13,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class Weights(
-    val recency: Double = 1.0,
-    val rarity: Double = 1.0,
+    // Recency dominates so a cold start (empty profile, all affinities ~0) still leads with the
+    // freshest posts; source/author/content lift entries as the profile learns.
+    val recency: Double = 2.0,
+    val rarity: Double = 0.3,
     val source: Double = 0.8,
-    val content: Double = 1.2,
+    val author: Double = 0.6,
+    val content: Double = 1.5,
     /** Hours for the recency decay constant. */
     val halfLifeHours: Double = 36.0,
     /** Penalty per entry already placed above from the same feed, so busy feeds spread out. */
@@ -28,12 +32,13 @@ data class Breakdown(
     val recency: Double = 0.0,
     val rarity: Double = 0.0,
     val source: Double = 0.0,
+    val author: Double = 0.0,
     val content: Double = 0.0,
     val duplicate: Double = 0.0,
     val fatigue: Double = 0.0,
     val topTerms: List<String> = emptyList(),
 ) {
-    val total get() = recency + rarity + source + content + duplicate + fatigue
+    val total get() = recency + rarity + source + author + content + duplicate + fatigue
 }
 
 data class Ranked(val entry: Entry, val score: Double, val breakdown: Breakdown)
@@ -49,6 +54,8 @@ class RankInput(
     /** TF-IDF interest vector: stemmed term → weight. */
     val profile: Map<String, Double>,
     val now: Long,
+    /** (feedId, author) → engagement counters. */
+    val authorStats: Map<Pair<Long, String>, AuthorStat> = emptyMap(),
 )
 
 class Ranker(private val weights: Weights = Weights()) {
@@ -67,11 +74,14 @@ class Ranker(private val weights: Weights = Weights()) {
             val recency = exp(-ageHours / weights.halfLifeHours) + if (ageHours <= 72) 0.25 else 0.0
             val rarity = (5 - (feed?.bucket ?: 2)) / 5.0
             val source = feed?.let { sourceAffinity(it) } ?: 0.0
+            val author = entry.author?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { input.authorStats[entry.feedId to it] }?.let { authorAffinity(it) } ?: 0.0
             val (affinity, stems) = contentAffinity(input.terms[entry.id].orEmpty(), idf, input.profile, profileNorm)
             val b = Breakdown(
                 recency = weights.recency * recency,
                 rarity = weights.rarity * rarity,
                 source = weights.source * source,
+                author = weights.author * author,
                 content = weights.content * affinity,
                 topTerms = stems,
             )
@@ -140,15 +150,21 @@ class Ranker(private val weights: Weights = Weights()) {
         val PRIOR = PRIOR_ALPHA / (PRIOR_ALPHA + PRIOR_BETA)
 
         /**
-         * Beta-smoothed engagement rate minus the prior, so a new feed scores 0, a feed whose entries
+         * Beta-smoothed engagement rate minus the prior, so a fresh source scores 0, one whose entries
          * are always opened tends to +0.75 and one that only gets dismissed tends to −0.25 − dismiss rate.
          */
-        fun sourceAffinity(feed: Feed): Double {
-            val denominator = feed.impressions + PRIOR_ALPHA + PRIOR_BETA
-            val engaged = (feed.opens + 2.0 * feed.favorites + PRIOR_ALPHA) / denominator
-            val dismissed = feed.dismissals / denominator
+        fun betaAffinity(impressions: Int, opens: Int, favorites: Int, dismissals: Int): Double {
+            val denominator = impressions + PRIOR_ALPHA + PRIOR_BETA
+            val engaged = (opens + 2.0 * favorites + PRIOR_ALPHA) / denominator
+            val dismissed = dismissals / denominator
             return (engaged - dismissed - PRIOR).coerceIn(-1.0, 1.0)
         }
+
+        fun sourceAffinity(feed: Feed): Double =
+            betaAffinity(feed.impressions, feed.opens, feed.favorites, feed.dismissals)
+
+        fun authorAffinity(stat: AuthorStat): Double =
+            betaAffinity(stat.impressions, stat.opens, stat.favorites, stat.dismissals)
 
         /** Cosine similarity between the entry's TF-IDF vector and the profile vector. */
         fun contentAffinity(
