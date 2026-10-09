@@ -1,8 +1,9 @@
 package algofeed.rank
 
 /**
- * Turns text into stemmed terms for the content model. Deliberately simple: lowercase, split on
- * non-letters, drop stopwords and short tokens, strip common English/French suffixes.
+ * Turns text into stemmed terms for near-duplicate detection (title Jaccard in the ranker).
+ * Deliberately simple: lowercase, split on non-letters, drop stopwords and short tokens, strip
+ * common English/French suffixes.
  */
 object Tokenizer {
     private val stopwords = """
@@ -33,13 +34,6 @@ object Tokenizer {
             .map(::stem)
             .filter { it.length >= 3 }
             .toList()
-
-    /** Term frequency normalised by the most frequent term, so long texts don't dominate. */
-    fun termFrequencies(text: String): Map<String, Float> {
-        val counts = tokenize(text).groupingBy { it }.eachCount()
-        val max = counts.values.maxOrNull() ?: return emptyMap()
-        return counts.mapValues { (_, c) -> 0.5f + 0.5f * c / max }
-    }
 
     fun stem(word: String): String {
         if (word.length <= 4) return word

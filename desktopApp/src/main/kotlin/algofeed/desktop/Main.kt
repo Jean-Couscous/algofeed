@@ -6,6 +6,9 @@ import algofeed.data.buildAlgofeed
 import algofeed.fetch.HackerNews
 import algofeed.fetch.createHttpClient
 import algofeed.fetch.defaultSources
+import algofeed.rank.DisabledEmbedder
+import algofeed.rank.Embedder
+import algofeed.rank.OnnxEmbedder
 import algofeed.reader.createReaderExtractor
 import algofeed.ui.AlgofeedApp
 import algofeed.ui.AlgofeedViewModel
@@ -25,6 +28,19 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 private fun dataDir(): File = File(dataHome(), "algofeed").apply { mkdirs() }
+
+/** The model lives in the app's bundled resources; ALGOFEED_MODEL_DIR overrides it for development. */
+private fun loadEmbedder(): Embedder {
+    val dir = System.getenv("ALGOFEED_MODEL_DIR")
+        ?: System.getProperty("compose.application.resources.dir")
+        ?: return DisabledEmbedder
+    val model = File(dir, "model_quantized.onnx")
+    val vocab = File(dir, "tokenizer.vocab")
+    if (!model.exists() || !vocab.exists()) return DisabledEmbedder
+    return runCatching {
+        vocab.useLines { lines -> OnnxEmbedder.create(model.absolutePath, lines) }
+    }.getOrElse { DisabledEmbedder }
+}
 
 private class DesktopPlatform(private val frame: () -> Frame?) : PlatformActions {
     override suspend fun pickOpml() = load("Import OPML") { name -> name.endsWith(".opml", true) || name.endsWith(".xml", true) }
@@ -66,6 +82,7 @@ fun main() {
         db, defaultSources(client, secrets), createReaderExtractor(client),
         hackerNews = HackerNews(client),
         mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
+        embedder = loadEmbedder(),
     )
 
     application {

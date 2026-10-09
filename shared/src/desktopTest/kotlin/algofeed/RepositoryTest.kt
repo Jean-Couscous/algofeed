@@ -29,9 +29,17 @@ class RepositoryTest {
     private val extractor = object : ReaderExtractor {
         override suspend fun extract(url: String) = Article("t", null, "<p>extracted</p>")
     }
-    private val repo = Repository(db, defaultSources(client), extractor, clock = { now })
+    private val repo = Repository(db, defaultSources(client), extractor, clock = { now }, embedder = FakeEmbedder())
 
     @AfterTest fun close() = db.close()
+
+    /** Cosine of a stored entry embedding against the learned profile. */
+    private suspend fun affinity(entryId: Long): Double {
+        val profile = repo.profile() ?: return 0.0
+        val vec = algofeed.rank.Vectors.fromBytes(db.embeddings().forEntries(listOf(entryId)).first().vector)
+        val norm = kotlin.math.sqrt(profile.sumOf { it.toDouble() * it })
+        return algofeed.rank.Ranker.contentAffinity(vec, profile, norm)
+    }
 
     @Test fun subscribeRefreshAndRank() = runTest {
         repo.addFeed("https://blog.example/feed")
@@ -46,7 +54,7 @@ class RepositoryTest {
         val rust = stream.first { it.entry.title?.contains("Rust") == true }.entry
         repo.markOpened(rust)
         repo.setFavorite(rust, true)
-        assertTrue(repo.profile().getValue("rust") > 0)
+        assertTrue(affinity(rust.id) > 0)
 
         // Opened entries leave the home stream, and so do entries scrolled past (feedi behaviour).
         assertTrue(repo.stream(StreamView.Home, Settings()).none { it.entry.id == rust.id })
@@ -91,7 +99,7 @@ class RepositoryTest {
         val feed = repo.addFeed("https://blog.example/feed")
         val garden = repo.stream(StreamView.Home, Settings()).first { it.entry.title?.contains("Garden") == true }.entry
         repo.setDismissed(garden, true)
-        assertTrue(repo.profile().getValue("garden") < 0)
+        assertTrue(affinity(garden.id) < 0)
         assertTrue(repo.stream(StreamView.Home, Settings()).none { it.entry.id == garden.id })
         assertEquals(1, db.feeds().get(feed.id)!!.dismissals)
     }

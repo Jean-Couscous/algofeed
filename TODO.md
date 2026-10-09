@@ -1,5 +1,5 @@
-- Proper embedding model integration? https://timkellogg.me/blog/2024/01/03/birb
-- Study:
-    https://en.wikipedia.org/wiki/Tf%E2%80%93idf
-    https://gitlab.com/ondrejfoltyn/nunti
-    https://gitlab.com/ondrejfoltyn/nunti/-/work_items/28#note_874896901
+## Small separate ideas
+- Nexusmods RSS support = Blocked: the feeds (nexusmods.com/<game>/rss) sit behind a
+  Cloudflare JS challenge that returns 403 to a plain HTTP client (curl and the app's
+  Ktor client alike, even with the Firefox UA). Would need a browser engine to clear it.
+  There is also no per-user Tracking Centre feed. Parked unless that changes.

@@ -94,25 +94,23 @@ data class AuthorStat(
     val dismissals: Int = 0,
 )
 
+/** The entry's content embedding, little-endian float32 (see [algofeed.rank.Vectors]). */
 @Entity(
-    tableName = "entry_term",
-    primaryKeys = ["entryId", "term"],
+    tableName = "entry_embedding",
     foreignKeys = [
         ForeignKey(Entry::class, ["id"], ["entryId"], onDelete = ForeignKey.CASCADE),
     ],
-    indices = [Index("term")],
 )
-data class EntryTerm(
-    val entryId: Long,
-    val term: String,
-    val tf: Float,
+data class EntryEmbedding(
+    @PrimaryKey val entryId: Long,
+    val vector: ByteArray,
 )
 
-/** One dimension of the learned interest vector. */
-@Entity(tableName = "profile_term")
-data class ProfileTerm(
-    @PrimaryKey val term: String,
-    val weight: Double,
+/** The learned interest vector, stored as a single row (id 0). */
+@Entity(tableName = "profile_vector")
+data class ProfileVector(
+    @PrimaryKey val id: Int = 0,
+    val vector: ByteArray,
 )
 
 @Entity(tableName = "setting")
@@ -120,7 +118,5 @@ data class Setting(
     @PrimaryKey val key: String,
     val value: String,
 )
-
-data class TermDf(val term: String, val df: Int)
 
 data class FeedVolume(val count: Int, val oldest: Long?)

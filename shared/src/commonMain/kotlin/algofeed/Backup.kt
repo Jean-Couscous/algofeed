@@ -8,11 +8,12 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class Backup(
-    val version: Int = 2,
+    val version: Int = 3,
     val settings: Settings = Settings(),
     val folders: List<BackupFolder> = emptyList(),
     val feeds: List<BackupFeed> = emptyList(),
-    val profile: Map<String, Double> = emptyMap(),
+    /** The learned interest vector (dense embedding). Replaces the pre-v3 term-weight map. */
+    val profileVector: List<Float> = emptyList(),
 )
 
 @Serializable

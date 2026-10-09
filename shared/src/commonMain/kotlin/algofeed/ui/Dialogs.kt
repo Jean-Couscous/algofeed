@@ -383,9 +383,7 @@ private fun MangadexAccountSection(md: MangadexAccountActions) {
 fun SettingsDialog(
     settings: Settings,
     options: SettingsOptions,
-    loadInterests: suspend () -> Pair<List<Pair<String, Double>>, List<Pair<String, Double>>>,
     onSave: (Settings) -> Unit,
-    onResetInterests: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
     onImportBackup: () -> Unit,
@@ -397,8 +395,6 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
 ) {
     var confirmReset by remember { mutableStateOf(false) }
-    var interests by remember { mutableStateOf<Pair<List<Pair<String, Double>>, List<Pair<String, Double>>>?>(null) }
-    LaunchedEffect(Unit) { interests = loadInterests() }
     val scope = rememberCoroutineScope()
     FormDialog(
         title = "Settings",
@@ -430,17 +426,6 @@ fun SettingsDialog(
         Section("Appearance")
         Segmented(listOf(ThemeMode.System to "System", ThemeMode.Light to "Light", ThemeMode.Dark to "Dark"), settings.theme) { onSave(settings.copy(theme = it)) }
         if (dynamicColorSupported) LabeledSwitch("Use wallpaper colors", settings.dynamicColor) { onSave(settings.copy(dynamicColor = it)) }
-
-        HorizontalDivider()
-        Section("Learned interests")
-        val (likes, dislikes) = interests ?: (emptyList<Pair<String, Double>>() to emptyList())
-        if (likes.isEmpty() && dislikes.isEmpty()) {
-            Text("Nothing learned yet. Open, favorite or hide entries to teach the ranking.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            if (likes.isNotEmpty()) Text("More of: " + likes.joinToString(", ") { it.first }, style = MaterialTheme.typography.bodySmall)
-            if (dislikes.isNotEmpty()) Text("Less of: " + dislikes.joinToString(", ") { it.first }, style = MaterialTheme.typography.bodySmall)
-        }
-        OutlinedButton(onClick = { onResetInterests(); interests = emptyList<Pair<String, Double>>() to emptyList() }) { Text("Forget learned interests") }
 
         hn?.let {
             HorizontalDivider()
@@ -515,7 +500,6 @@ fun SettingsDialog(
                         working = true
                         scope.launch {
                             onRemoveAllAndReset()
-                            interests = emptyList<Pair<String, Double>>() to emptyList()
                             working = false
                             confirmReset = false
                         }

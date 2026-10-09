@@ -27,6 +27,8 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "algofeed"
+            // Bundles the embedding model + vocab; at runtime they are at compose.application.resources.dir.
+            appResourcesRootDir.set(project(":shared").layout.buildDirectory.dir("embedding"))
             // CI passes -Palgofeed.versionName so desktop packages carry the release's version.
             packageVersion = providers.gradleProperty("algofeed.versionName").orNull ?: "0.1.0"
             // From suggestRuntimeModules, plus jdk.crypto.ec: HTTPS key exchange on Java 21 needs it,
@@ -38,6 +40,12 @@ compose.desktop {
         }
     }
 }
+
+// The embedding model asset must be fetched before any task that runs or packages the app reads it.
+tasks.matching {
+    it.name in setOf("run", "runDistributable", "prepareAppResources", "createDistributable",
+        "packageDistributionForCurrentOS", "packageReleaseDistributionForCurrentOS")
+}.configureEach { dependsOn(":shared:prepareEmbeddingAssets") }
 
 // Development tool: ./gradlew :desktopApp:screenshot --args="<db> <outdir> [sources...]"
 tasks.register<JavaExec>("screenshot") {

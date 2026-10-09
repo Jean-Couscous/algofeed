@@ -84,9 +84,6 @@ interface EntryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(entries: List<Entry>): List<Long>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTerms(terms: List<EntryTerm>)
-
     @Query("SELECT * FROM entry WHERE id = :id")
     suspend fun get(id: Long): Entry?
 
@@ -134,15 +131,6 @@ interface EntryDao {
     )
     suspend fun search(q: String): List<Entry>
 
-    @Query("SELECT * FROM entry_term WHERE entryId IN (:ids)")
-    suspend fun termsFor(ids: List<Long>): List<EntryTerm>
-
-    @Query("SELECT term, COUNT(*) AS df FROM entry_term GROUP BY term")
-    suspend fun documentFrequencies(): List<TermDf>
-
-    @Query("SELECT COUNT(DISTINCT entryId) FROM entry_term")
-    suspend fun termDocumentCount(): Int
-
     @Query("SELECT COUNT(*) AS count, MIN(sortDate) AS oldest FROM entry WHERE feedId = :feedId")
     suspend fun volume(feedId: Long): FeedVolume
 
@@ -175,17 +163,23 @@ interface EntryDao {
 }
 
 @Dao
-interface ProfileDao {
-    @Query("SELECT * FROM profile_term")
-    suspend fun all(): List<ProfileTerm>
-
+interface EntryEmbeddingDao {
     @Upsert
-    suspend fun upsert(terms: List<ProfileTerm>)
+    suspend fun upsert(embeddings: List<EntryEmbedding>)
 
-    @Query("DELETE FROM profile_term WHERE ABS(weight) < :threshold")
-    suspend fun deleteBelow(threshold: Double)
+    @Query("SELECT * FROM entry_embedding WHERE entryId IN (:ids)")
+    suspend fun forEntries(ids: List<Long>): List<EntryEmbedding>
+}
 
-    @Query("DELETE FROM profile_term")
+@Dao
+interface ProfileVectorDao {
+    @Query("SELECT vector FROM profile_vector WHERE id = 0")
+    suspend fun get(): ByteArray?
+
+    @Query("INSERT INTO profile_vector(id, vector) VALUES(0, :vector) ON CONFLICT(id) DO UPDATE SET vector = :vector")
+    suspend fun put(vector: ByteArray)
+
+    @Query("DELETE FROM profile_vector")
     suspend fun clear()
 }
 
@@ -201,9 +195,7 @@ interface SettingDao {
 /** Clears subscriptions, entries and everything learned from them, in one transaction. Settings stay. */
 @Dao
 abstract class ResetDao {
-    @Query("DELETE FROM entry_term")
-    protected abstract suspend fun clearEntryTerms()
-
+    // entry_embedding rows cascade when their entry is deleted.
     @Query("DELETE FROM entry")
     protected abstract suspend fun clearEntries()
 
@@ -213,8 +205,8 @@ abstract class ResetDao {
     @Query("DELETE FROM folder")
     protected abstract suspend fun clearFolders()
 
-    @Query("DELETE FROM profile_term")
-    protected abstract suspend fun clearProfileTerms()
+    @Query("DELETE FROM profile_vector")
+    protected abstract suspend fun clearProfileVector()
 
     /** Bookkeeping tied to the learned profile. */
     @Query("DELETE FROM setting WHERE key = 'profile.lastDecay'")
@@ -222,11 +214,10 @@ abstract class ResetDao {
 
     @Transaction
     open suspend fun clearSubscriptionsAndLearning() {
-        clearEntryTerms()
         clearEntries()
         clearFeeds()
         clearFolders()
-        clearProfileTerms()
+        clearProfileVector()
         clearLearningState()
     }
 }

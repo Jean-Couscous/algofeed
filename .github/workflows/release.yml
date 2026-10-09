@@ -158,5 +158,13 @@ jobs:
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
           su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && ALGOFEED_VERSION='$version' makepkg -d --noconfirm"
+          pkg="algofeed-$version-1-x86_64.pkg.tar.zst"
+          # Publish a pacman repo database alongside the package so the release works as a
+          # third-party repo (see the README). repo-add leaves algofeed.db as a symlink, which
+          # GitHub release assets can't be, so upload a plain copy under that name too.
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && repo-add algofeed.db.tar.gz '$pkg'"
+          ( cd packaging/arch && rm -f algofeed.db && cp algofeed.db.tar.gz algofeed.db )
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          gh release upload "$TAG" packaging/arch/algofeed-"$version"-1-x86_64.pkg.tar.zst --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" \
+            "packaging/arch/$pkg" packaging/arch/algofeed.db packaging/arch/algofeed.db.tar.gz \
+            --clobber --repo "$GITHUB_REPOSITORY"

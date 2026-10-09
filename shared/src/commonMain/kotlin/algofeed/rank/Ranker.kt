@@ -5,9 +5,7 @@ import algofeed.data.Entry
 import algofeed.data.Feed
 import algofeed.util.HOUR_MS
 import algofeed.util.Urls
-import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlinx.serialization.Serializable
 
@@ -47,12 +45,10 @@ data class Ranked(val entry: Entry, val score: Double, val breakdown: Breakdown)
 class RankInput(
     val candidates: List<Entry>,
     val feeds: Map<Long, Feed>,
-    /** entryId → term → tf */
-    val terms: Map<Long, Map<String, Float>>,
-    val documentFrequency: Map<String, Int>,
-    val documentCount: Int,
-    /** TF-IDF interest vector: stemmed term → weight. */
-    val profile: Map<String, Double>,
+    /** entryId → L2-normalized content embedding; absent until the entry has been embedded. */
+    val embeddings: Map<Long, FloatArray>,
+    /** The learned interest vector, or null before anything has been learned. */
+    val profile: FloatArray?,
     val now: Long,
     /** (feedId, author) → engagement counters. */
     val authorStats: Map<Pair<Long, String>, AuthorStat> = emptyMap(),
@@ -66,8 +62,8 @@ class Ranker(private val weights: Weights = Weights()) {
      * penalties.
      */
     fun rank(input: RankInput): List<Ranked> {
-        val idf = Idf(input.documentFrequency, input.documentCount)
-        val profileNorm = sqrt(input.profile.values.sumOf { it * it })
+        val profile = input.profile
+        val profileNorm = profile?.let { sqrt(it.sumOf { v -> v.toDouble() * v }) } ?: 0.0
         val scored = input.candidates.map { entry ->
             val feed = input.feeds[entry.feedId]
             val ageHours = ((input.now - entry.sortDate).coerceAtLeast(0L)).toDouble() / HOUR_MS
@@ -76,29 +72,28 @@ class Ranker(private val weights: Weights = Weights()) {
             val source = feed?.let { sourceAffinity(it) } ?: 0.0
             val author = entry.author?.trim()?.takeIf { it.isNotEmpty() }
                 ?.let { input.authorStats[entry.feedId to it] }?.let { authorAffinity(it) } ?: 0.0
-            val (affinity, stems) = contentAffinity(input.terms[entry.id].orEmpty(), idf, input.profile, profileNorm)
+            val affinity = contentAffinity(input.embeddings[entry.id], profile, profileNorm)
             val b = Breakdown(
                 recency = weights.recency * recency,
                 rarity = weights.rarity * rarity,
                 source = weights.source * source,
                 author = weights.author * author,
                 content = weights.content * affinity,
-                topTerms = stems,
             )
             Ranked(entry, b.total, b)
         }.sortedByDescending { it.score }
-        return diversify(penalizeDuplicates(scored, input.terms))
+        return diversify(penalizeDuplicates(scored))
     }
 
     /** Duplicates (same URL, or near-identical titles) of a higher-ranked entry get pushed down. */
-    private fun penalizeDuplicates(sorted: List<Ranked>, terms: Map<Long, Map<String, Float>>): List<Ranked> {
+    private fun penalizeDuplicates(sorted: List<Ranked>): List<Ranked> {
         val seenUrls = HashSet<String>()
         val kept = ArrayList<Set<String>>()
         val out = sorted.mapIndexed { index, r ->
             val url = Urls.normalize(r.entry.url)
             var dup = url != null && !seenUrls.add(url)
             if (!dup && index < DUPLICATE_WINDOW) {
-                val words = titleWords(r.entry, terms)
+                val words = titleWords(r.entry)
                 if (words.size >= 3) {
                     dup = kept.any { jaccard(it, words) >= 0.6 }
                     kept += words
@@ -166,31 +161,19 @@ class Ranker(private val weights: Weights = Weights()) {
         fun authorAffinity(stat: AuthorStat): Double =
             betaAffinity(stat.impressions, stat.opens, stat.favorites, stat.dismissals)
 
-        /** Cosine similarity between the entry's TF-IDF vector and the profile vector. */
-        fun contentAffinity(
-            terms: Map<String, Float>,
-            idf: Idf,
-            profile: Map<String, Double>,
-            profileNorm: Double,
-        ): Pair<Double, List<String>> {
-            if (terms.isEmpty() || profileNorm == 0.0) return 0.0 to emptyList()
+        /**
+         * Cosine similarity between the entry embedding and the profile vector. The entry vector is
+         * unit-length, so this is their dot product divided by the profile norm.
+         */
+        fun contentAffinity(entryVector: FloatArray?, profile: FloatArray?, profileNorm: Double): Double {
+            if (entryVector == null || profile == null || profileNorm == 0.0 || entryVector.size != profile.size) return 0.0
             var dot = 0.0
-            var norm = 0.0
-            val contributions = ArrayList<Pair<String, Double>>()
-            for ((term, tf) in terms) {
-                val w = tf * idf[term]
-                norm += w * w
-                val p = profile[term] ?: continue
-                dot += w * p
-                contributions += term to w * p
-            }
-            if (norm == 0.0) return 0.0 to emptyList()
-            val top = contributions.filter { abs(it.second) > 0 }.sortedByDescending { abs(it.second) }.take(3).map { it.first }
-            return dot / (sqrt(norm) * profileNorm) to top
+            for (i in entryVector.indices) dot += entryVector[i].toDouble() * profile[i]
+            return dot / profileNorm
         }
 
-        private fun titleWords(entry: Entry, terms: Map<Long, Map<String, Float>>): Set<String> =
-            entry.title?.let { Tokenizer.tokenize(it).toSet() } ?: terms[entry.id]?.keys.orEmpty()
+        private fun titleWords(entry: Entry): Set<String> =
+            entry.title?.let { Tokenizer.tokenize(it).toSet() } ?: emptySet()
 
         private fun jaccard(a: Set<String>, b: Set<String>): Double {
             if (a.isEmpty() || b.isEmpty()) return 0.0
@@ -198,8 +181,4 @@ class Ranker(private val weights: Weights = Weights()) {
             return inter.toDouble() / (a.size + b.size - inter)
         }
     }
-}
-
-class Idf(private val df: Map<String, Int>, private val documentCount: Int) {
-    operator fun get(term: String): Double = ln((documentCount + 1.0) / ((df[term] ?: 0) + 1.0)) + 1.0
 }

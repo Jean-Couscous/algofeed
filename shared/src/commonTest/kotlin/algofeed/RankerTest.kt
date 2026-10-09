@@ -3,7 +3,6 @@ package algofeed
 import algofeed.data.Entry
 import algofeed.data.Feed
 import algofeed.rank.Buckets
-import algofeed.rank.Idf
 import algofeed.rank.ProfileLearner
 import algofeed.rank.RankInput
 import algofeed.rank.Ranker
@@ -17,6 +16,7 @@ import kotlin.test.assertTrue
 
 class RankerTest {
     private val now = 1_791_288_000_000L
+    private val embedder = FakeEmbedder()
 
     private fun feed(id: Long, bucket: Int, impressions: Int = 0, opens: Int = 0, favorites: Int = 0, dismissals: Int = 0) =
         Feed(id = id, type = "rss", url = "https://f$id.example", title = "Feed $id", bucket = bucket, createdAt = 0,
@@ -30,11 +30,10 @@ class RankerTest {
         entries: List<Entry>,
         feeds: List<Feed>,
         texts: Map<Long, String> = emptyMap(),
-        profile: Map<String, Double> = emptyMap(),
+        profile: FloatArray? = null,
     ): RankInput {
-        val terms = texts.mapValues { Tokenizer.termFrequencies(it.value) }
-        val df = terms.values.flatMap { it.keys }.groupingBy { it }.eachCount()
-        return RankInput(entries, feeds.associateBy { it.id }, terms, df, terms.size, profile, now)
+        val embeddings = texts.mapValues { embedder.vectorFor(it.value) }
+        return RankInput(entries, feeds.associateBy { it.id }, embeddings, profile, now)
     }
 
     @Test fun bucketsMatchFeediThresholds() {
@@ -93,15 +92,13 @@ class RankerTest {
             3L to "Gardening tips tomato season",
         )
         val entries = texts.keys.map { entry(it, 1, hoursAgo = 3.0, title = texts.getValue(it)) }
-        val inp = input(entries, feeds, texts)
-        val idf = Idf(inp.documentFrequency, inp.documentCount)
-        val profile = HashMap<String, Double>()
-        ProfileLearner.apply(profile, Tokenizer.termFrequencies("Rust borrow checker lifetimes"), idf, Signal.Favorite)
-        ProfileLearner.apply(profile, Tokenizer.termFrequencies("celebrity gossip"), idf, Signal.Dismiss)
+        val profile = FloatArray(embedder.dim)
+        ProfileLearner.apply(profile, embedder.vectorFor("Rust borrow checker lifetimes"), Signal.Favorite)
+        ProfileLearner.apply(profile, embedder.vectorFor("celebrity gossip"), Signal.Dismiss)
 
         val ranked = Ranker(algofeed.rank.Weights(maxRun = 10)).rank(input(entries, feeds, texts, profile))
         assertEquals(listOf(1L, 3L, 2L), ranked.map { it.entry.id })
-        assertTrue(ranked.first().breakdown.topTerms.contains("rust"))
+        assertTrue(ranked.first().breakdown.content > 0)
         assertTrue(ranked.last().breakdown.content < 0)
     }
 
@@ -140,8 +137,8 @@ class RankerTest {
     }
 
     @Test fun decayShrinksWeights() {
-        val decayed = ProfileLearner.decay(mapOf("a" to 1.0), days = 7.0)
-        assertEquals(0.868, decayed.getValue("a"), 1e-3)
+        val decayed = ProfileLearner.decay(floatArrayOf(1f), days = 7.0)
+        assertEquals(0.868, decayed[0].toDouble(), 1e-3)
     }
 
     @Test fun tokenizerDropsStopwordsAndStems() {

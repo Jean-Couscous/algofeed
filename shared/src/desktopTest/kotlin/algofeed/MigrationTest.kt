@@ -10,6 +10,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class MigrationTest {
     private val dir = Files.createTempDirectory("migration")
@@ -111,5 +112,30 @@ class MigrationTest {
         db.close()
         assertEquals(0L, authorRows)
         assertEquals(2L, opens)
+    }
+
+    @Test fun tfIdfTablesGiveWayToEmbeddings() {
+        helper.createDatabase(7).apply {
+            execSQL(
+                """INSERT INTO feed (id, type, url, title, bucket, enabled, createdAt, impressions, opens, favorites, dismissals, preferFeedVersion)
+                   VALUES (1, 'rss', 'https://blog.example/feed', 'Blog', 0, 1, 0, 0, 0, 0, 0, 0)"""
+            )
+            execSQL("INSERT INTO entry (id, feedId, remoteId, sortDate, fetchedAt, readSeconds, media) VALUES (1, 1, 'a', 0, 0, 0, '[]')")
+            execSQL("INSERT INTO entry_term (entryId, term, tf) VALUES (1, 'rust', 1.0)")
+            execSQL("INSERT INTO profile_term (term, weight) VALUES ('rust', 2.0)")
+            execSQL("INSERT INTO setting (key, value) VALUES ('profile.lastDecay', '123'), ('settings', '{}')")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(8)
+        fun strings(sql: String) = db.prepare(sql).use { st -> buildList { while (st.step()) add(st.getText(0)) } }
+        val tables = strings("SELECT name FROM sqlite_master WHERE type = 'table'")
+        val keys = strings("SELECT key FROM setting")
+        val entries = db.prepare("SELECT COUNT(*) FROM entry").use { st -> st.step(); st.getLong(0) }
+        db.close()
+        assertFalse("entry_term" in tables || "profile_term" in tables)
+        assertTrue("entry_embedding" in tables && "profile_vector" in tables)
+        // The learned profile resets (its decay bookkeeping goes); subscriptions and entries survive.
+        assertEquals(listOf("settings"), keys)
+        assertEquals(1L, entries)
     }
 }

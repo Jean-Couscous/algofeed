@@ -49,7 +49,7 @@ data class ReaderState(
 }
 
 /** Open full-screen media: a post's gallery, starting at [index]. */
-data class ViewerState(val media: List<MediaItem>, val index: Int)
+data class ViewerState(val media: List<MediaItem>, val index: Int, val entry: Entry? = null)
 
 enum class CommentSource(val siteName: String) { HackerNews("HN"), FourChan("4chan") }
 
@@ -198,10 +198,10 @@ class AlgofeedViewModel(
                 when {
                     reloadAfter || _state.value.items.isEmpty() -> reload()
                     r.newEntries > 0 -> _state.update { it.copy(newAvailable = it.newAvailable + r.newEntries) }
-                    // A manual refresh that changed nothing would otherwise give no sign it ran.
-                    manual && r.failures.isEmpty() -> notify("You're up to date")
+                    // A manual refresh that changed nothing would otherwise give no sign it ran. A feed
+                    // that failed is left to the quiet error badge in the sidebar, not a snackbar.
+                    manual -> notify("You're up to date")
                 }
-                if (r.failures.isNotEmpty()) notify("${r.failures.size} feed(s) failed to update")
             }
         }
     }
@@ -513,7 +513,7 @@ class AlgofeedViewModel(
             entry.thumbnailUrl?.let { listOf(MediaItem(it, MediaKind.IMAGE)) }.orEmpty()
         }
         if (media.isEmpty()) return open(entry)
-        _state.update { it.copy(viewer = ViewerState(media, index.coerceIn(0, media.lastIndex))) }
+        _state.update { it.copy(viewer = ViewerState(media, index.coerceIn(0, media.lastIndex), entry)) }
     }
 
     fun closeViewer() = _state.update { it.copy(viewer = null) }
@@ -574,13 +574,6 @@ class AlgofeedViewModel(
         viewModelScope.launch { repo.setSecret(key, value) }
     }
 
-    /** Strongest learned likes and dislikes, as word stems. */
-    suspend fun interests(): Pair<List<Pair<String, Double>>, List<Pair<String, Double>>> {
-        val profile = repo.profile().entries.map { it.key to it.value }
-        return profile.filter { it.second > 0 }.sortedByDescending { it.second }.take(15) to
-            profile.filter { it.second < 0 }.sortedBy { it.second }.take(10)
-    }
-
     /** Removes every subscription, entry and learned preference; settings are untouched. */
     suspend fun removeAllAndReset() {
         closeReader()
@@ -589,14 +582,6 @@ class AlgofeedViewModel(
         _state.update { it.copy(view = StreamView.Home, items = emptyList(), newAvailable = 0, focused = -1) }
         notify("Removed all subscriptions and reset the ranking")
         reload()
-    }
-
-    fun resetInterests() {
-        viewModelScope.launch {
-            repo.resetProfile()
-            notify("Learned interests cleared")
-            reload()
-        }
     }
 
     fun importOpml(platform: PlatformActions) {

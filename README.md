@@ -24,7 +24,7 @@ Algofeed puts everything you subscribe to (blogs, Reddit, Hacker News, Mastodon,
 
 ## Features
 
-- **One ranked Home** — four weights you set in Settings: freshness, quiet feeds, feeds you engage with, topics you read. Each entry's info button shows why it ranks where it does.
+- **One ranked Home** — mixes freshness, quiet feeds, the feeds and authors you engage with, and how close a post is to your interests, matched semantically across languages by an on-device embedding model. Each entry's info button shows why it ranks where it does.
 - **Learns from use** — opening, reading for 30 seconds, favoriting and bookmarking pull related entries up; "Show less like this" and scrolling past push them down.
 - **Many sources** — RSS, Atom and RDF; Reddit subreddits and public custom feeds; Hacker News; Kagi News; Lobsters; Mastodon accounts and hashtags; YouTube channels.
 - **Reader view** — articles extracted to clean text, comment threads for Hacker News and Reddit, and image posts shown as images.
@@ -56,6 +56,24 @@ chmod +x Algofeed-<version>-x86_64.AppImage
 ```
 
 On the phone itself, opening the APK works too; Android asks once to allow installs from the app you opened it with. There are no Windows or macOS builds; see [Build from source](#build-from-source).
+
+### Arch Linux, as a pacman repo
+
+To install and update through `pacman` instead of downloading each package by hand, add the releases as a third-party repository. Append to `/etc/pacman.conf`:
+
+```ini
+[algofeed]
+SigLevel = Optional TrustAll
+Server = https://github.com/Jean-Couscous/algofeed/releases/latest/download
+```
+
+Then:
+
+```bash
+sudo pacman -Sy algofeed
+```
+
+The packages aren't signed, hence `TrustAll`. `releases/latest/download` always resolves to the newest release, so `sudo pacman -Syu` upgrades Algofeed along with the rest of the system.
 
 ## Usage
 
@@ -100,7 +118,7 @@ Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algof
 
 ## Build from source
 
-Requires a JDK 17 or later to run Gradle; the build downloads JDK 21 itself if needed. The Android app also needs the Android SDK with platform 37, its path set in `local.properties` (`sdk.dir=…`) or `ANDROID_HOME`.
+Requires a JDK 17 or later to run Gradle; the build downloads JDK 21 itself if needed. The Android app also needs the Android SDK with platform 37, its path set in `local.properties` (`sdk.dir=…`) or `ANDROID_HOME`. The first build also fetches the content-ranking model (`multilingual-e5-small`, ~112 MB ONNX) into `shared/build/embedding/` via the `prepareEmbeddingAssets` task, using Python 3 to convert its vocabulary; it is bundled into the packages and never committed.
 
 ```bash
 git clone https://github.com/Jean-Couscous/algofeed.git

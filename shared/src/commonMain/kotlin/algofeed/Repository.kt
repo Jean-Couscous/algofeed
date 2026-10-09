@@ -2,10 +2,9 @@ package algofeed
 
 import algofeed.data.AppDatabase
 import algofeed.data.Entry
-import algofeed.data.EntryTerm
+import algofeed.data.EntryEmbedding
 import algofeed.data.Feed
 import algofeed.data.Folder
-import algofeed.data.ProfileTerm
 import algofeed.data.Setting
 import algofeed.fetch.EntryDraft
 import algofeed.fetch.FetchException
@@ -18,13 +17,14 @@ import algofeed.fetch.FourChanAdapter
 import algofeed.fetch.Sources
 import algofeed.opml.Opml
 import algofeed.rank.Buckets
-import algofeed.rank.Idf
+import algofeed.rank.DisabledEmbedder
+import algofeed.rank.Embedder
 import algofeed.rank.ProfileLearner
 import algofeed.rank.RankInput
 import algofeed.rank.Ranked
 import algofeed.rank.Ranker
 import algofeed.rank.Signal
-import algofeed.rank.Tokenizer
+import algofeed.rank.Vectors
 import algofeed.reader.Article
 import algofeed.reader.ReaderExtractor
 import algofeed.util.DAY_MS
@@ -73,10 +73,12 @@ class Repository(
     private val hackerNews: HackerNews? = null,
     /** MangaDex OAuth; null hides the login and the followed feed can't authenticate. */
     private val mangadexAuth: algofeed.fetch.MangadexAuth? = null,
+    /** On-device content embedder; [DisabledEmbedder] (the default) leaves the content signal at 0. */
+    private val embedder: Embedder = DisabledEmbedder,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val profileMutex = Mutex()
-    private var profileCache: MutableMap<String, Double>? = null
+    private var profileCache: FloatArray? = null
 
     val feeds: Flow<List<Feed>> = db.feeds().observeAll()
     val folders: Flow<List<Folder>> = db.folders().observeAll()
@@ -295,15 +297,31 @@ class Repository(
             )
         }
         val ids = db.entries().insertIgnore(entries)
-        val terms = ArrayList<EntryTerm>()
+        val toEmbed = ArrayList<Pair<Long, String>>()
         ids.forEachIndexed { i, id ->
             if (id <= 0) return@forEachIndexed
             val e = entries[i]
-            val text = listOfNotNull(e.title, e.title, Html.toText(e.summaryHtml ?: e.contentHtml).take(2000)).joinToString(" ")
-            Tokenizer.termFrequencies(text).forEach { (term, tf) -> terms += EntryTerm(id, term, tf) }
+            val body = Html.toText(e.summaryHtml ?: e.contentHtml).take(2000)
+            toEmbed += id to embeddingText(e.title, body)
         }
-        if (terms.isNotEmpty()) db.entries().insertTerms(terms)
+        embedAndStore(toEmbed)
         return ids.count { it > 0 }
+    }
+
+    /** e5 expects a "query: " prefix; the title leads since many sources give little or no body. */
+    private fun embeddingText(title: String?, body: String): String =
+        "query: " + listOfNotNull(title?.trim()?.ifEmpty { null }, body.trim().ifEmpty { null }).joinToString(". ")
+
+    /** Embeds entries and stores their vectors; a model failure leaves them unembedded (content = 0). */
+    private suspend fun embedAndStore(items: List<Pair<Long, String>>) {
+        if (items.isEmpty()) return
+        val vectors = runCatchingCancellable { embedder.embed(items.map { it.second }) }.getOrNull() ?: return
+        val rows = ArrayList<EntryEmbedding>(items.size)
+        items.forEachIndexed { i, (id, _) ->
+            val v = vectors.getOrNull(i) ?: return@forEachIndexed
+            if (v.isNotEmpty()) rows += EntryEmbedding(id, Vectors.toBytes(v))
+        }
+        if (rows.isNotEmpty()) db.embeddings().upsert(rows)
     }
 
     // --- streams
@@ -332,9 +350,7 @@ class Repository(
         val input = RankInput(
             candidates = candidates,
             feeds = feeds,
-            terms = termsFor(candidates.map { it.id }),
-            documentFrequency = db.entries().documentFrequencies().associate { it.term to it.df },
-            documentCount = db.entries().termDocumentCount(),
+            embeddings = embeddingsFor(candidates.map { it.id }),
             profile = profile(),
             now = clock(),
             authorStats = authorStats,
@@ -344,10 +360,9 @@ class Repository(
 
     private fun List<Entry>.unranked() = map { Ranked(it, 0.0, algofeed.rank.Breakdown()) }
 
-    private suspend fun termsFor(ids: List<Long>): Map<Long, Map<String, Float>> =
-        ids.chunked(900).flatMap { db.entries().termsFor(it) }
-            .groupBy({ it.entryId }, { it.term to it.tf })
-            .mapValues { (_, pairs) -> pairs.toMap() }
+    private suspend fun embeddingsFor(ids: List<Long>): Map<Long, FloatArray> =
+        ids.chunked(900).flatMap { db.embeddings().forEntries(it) }
+            .associate { it.entryId to Vectors.fromBytes(it.vector) }
 
     suspend fun entry(id: Long): Entry? = db.entries().get(id)
 
@@ -409,35 +424,31 @@ class Repository(
 
     private suspend fun learn(entries: List<Entry>, signal: Signal, scale: Double = 1.0) {
         if (entries.isEmpty()) return
-        val terms = termsFor(entries.map { it.id })
-        if (terms.isEmpty()) return
-        val idf = Idf(db.entries().documentFrequencies().associate { it.term to it.df }, db.entries().termDocumentCount())
+        val vectors = embeddingsFor(entries.map { it.id })
+        if (vectors.isEmpty()) return
         profileMutex.withLock {
-            val profile = loadProfileLocked()
-            val changed = HashMap<String, Double>()
+            val current = loadProfileLocked()
+            val dim = current?.size ?: vectors.values.firstOrNull { it.isNotEmpty() }?.size ?: return@withLock
+            val profile = current?.copyOf() ?: FloatArray(dim)
             for (e in entries) {
-                val entryTerms = terms[e.id] ?: continue
-                val scaled = if (scale == 1.0) entryTerms else entryTerms.mapValues { (it.value * scale).toFloat() }
-                changed += ProfileLearner.apply(profile, scaled, idf, signal)
+                val v = vectors[e.id] ?: continue
+                if (v.size != dim) continue
+                ProfileLearner.apply(profile, v, signal, scale)
             }
-            db.profile().upsert(changed.map { ProfileTerm(it.key, it.value) })
+            db.profileVector().put(Vectors.toBytes(profile))
+            profileCache = profile
         }
     }
 
-    private suspend fun loadProfileLocked(): MutableMap<String, Double> =
-        profileCache ?: db.profile().all().associateTo(HashMap()) { it.term to it.weight }.also { profileCache = it }
+    private suspend fun loadProfileLocked(): FloatArray? =
+        profileCache ?: db.profileVector().get()?.let { Vectors.fromBytes(it) }?.also { profileCache = it }
 
-    suspend fun profile(): Map<String, Double> = profileMutex.withLock { HashMap(loadProfileLocked()) }
+    suspend fun profile(): FloatArray? = profileMutex.withLock { loadProfileLocked()?.copyOf() }
 
     /** Unsubscribes from everything and forgets all learning; settings stay. */
     suspend fun removeAllAndReset() = profileMutex.withLock {
         db.reset().clearSubscriptionsAndLearning()
-        profileCache = HashMap()
-    }
-
-    suspend fun resetProfile() = profileMutex.withLock {
-        db.profile().clear()
-        profileCache = HashMap()
+        profileCache = null
     }
 
     private suspend fun decayProfileIfDue() {
@@ -450,10 +461,11 @@ class Repository(
         val days = (now - last).toDouble() / DAY_MS
         if (days < 1) return
         profileMutex.withLock {
-            val decayed = ProfileLearner.trim(ProfileLearner.decay(loadProfileLocked(), days))
-            db.profile().clear()
-            db.profile().upsert(decayed.map { ProfileTerm(it.key, it.value) })
-            profileCache = HashMap(decayed)
+            loadProfileLocked()?.let { current ->
+                val decayed = ProfileLearner.decay(current, days)
+                db.profileVector().put(Vectors.toBytes(decayed))
+                profileCache = decayed
+            }
         }
         db.settings().put(Setting(DECAY_KEY, now.toString()))
     }
@@ -529,7 +541,7 @@ class Repository(
                     },
                 )
             },
-            profile = profile(),
+            profileVector = profile()?.toList() ?: emptyList(),
         )
         return json.encodeToString(Backup.serializer(), backup)
     }
@@ -555,8 +567,8 @@ class Repository(
             runCatchingCancellable { refreshFeed(saved) }
             added++
         }
-        if (backup.profile.isNotEmpty()) profileMutex.withLock {
-            db.profile().upsert(backup.profile.map { ProfileTerm(it.key, it.value) })
+        if (backup.profileVector.isNotEmpty()) profileMutex.withLock {
+            db.profileVector().put(Vectors.toBytes(backup.profileVector.toFloatArray()))
             profileCache = null
         }
         return added

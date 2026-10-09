@@ -4,6 +4,11 @@ import algofeed.StreamView
 import algofeed.data.Feed
 import algofeed.data.Folder
 import algofeed.fetch.HackerNews
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -30,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -42,6 +48,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +61,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -254,7 +262,8 @@ private fun AppContent(
         // over the margins too, while its content stays a readable width in the middle.
         val streamMaxWidth = if (wide && !state.reader.open) 760.dp else Dp.Unspecified
         val stream: @Composable (Modifier) -> Unit = { modifier ->
-            Column(modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
+          Box(modifier) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.widthIn(max = streamMaxWidth)) {
                         StreamHeader(
@@ -315,6 +324,23 @@ private fun AppContent(
                     }
                 }
             }
+            // Touch-only back-to-top, over the entry list once it's scrolled down a few rows.
+            if (LocalTouchUi.current && state.items.isNotEmpty() && state.view != StreamView.Media) {
+                val showTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+                AnimatedVisibility(
+                    visible = showTop,
+                    enter = fadeIn() + slideInVertically { it / 2 },
+                    exit = fadeOut() + slideOutVertically { it / 2 },
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                        .padding(16.dp),
+                ) {
+                    SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } }) {
+                        Icon(Icons.Outlined.KeyboardArrowUp, "Back to top")
+                    }
+                }
+            }
+          }
         }
 
         val reader: @Composable (Modifier) -> Unit = { modifier ->
@@ -371,7 +397,24 @@ private fun AppContent(
             }
         }
 
-        state.viewer?.let { MediaViewer(it.media, it.index, onClose = vm::closeViewer) }
+        state.viewer?.let { v ->
+            MediaViewer(
+                media = v.media,
+                startIndex = v.index,
+                sourceIsThread = v.entry?.commentsUrl != null,
+                // A media post usually has a discussion; open it in the in-app reader. Only a post
+                // with no thread falls back to its source page in the browser.
+                onOpenSource = v.entry?.let { entry ->
+                    val link = entry.url
+                    when {
+                        entry.commentsUrl != null -> ({ vm.closeViewer(); vm.open(entry) })
+                        link != null -> ({ vm.openedExternally(entry); uri.openUri(link) })
+                        else -> null
+                    }
+                },
+                onClose = vm::closeViewer,
+            )
+        }
     }
 
     when (val d = dialog) {
@@ -385,9 +428,7 @@ private fun AppContent(
         DialogState.Settings -> SettingsDialog(
             settings = state.settings,
             options = vm.settingsOptions,
-            loadInterests = vm::interests,
             onSave = vm::saveSettings,
-            onResetInterests = vm::resetInterests,
             onImport = { vm.importOpml(platform) },
             onExport = { vm.exportOpml(platform) },
             onImportBackup = { vm.importBackup(platform) },

@@ -35,8 +35,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -115,7 +117,14 @@ private val CircleBadge = androidx.compose.foundation.shape.CircleShape
 
 /** Full-screen gallery viewer: swipe between a post's images, pinch/scroll/double-tap to zoom, videos play with controls. */
 @Composable
-fun MediaViewer(media: List<MediaItem>, startIndex: Int, onClose: () -> Unit) {
+fun MediaViewer(
+    media: List<MediaItem>,
+    startIndex: Int,
+    /** Whether [onOpenSource] opens an in-app discussion (vs. the source page in a browser). */
+    sourceIsThread: Boolean,
+    onOpenSource: (() -> Unit)?,
+    onClose: () -> Unit,
+) {
     if (media.isEmpty()) return
     Dialog(onDismissRequest = onClose, properties = fullScreenDialogProperties()) {
         SystemBarIcons(darkTheme = true)
@@ -178,6 +187,14 @@ fun MediaViewer(media: List<MediaItem>, startIndex: Int, onClose: () -> Unit) {
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(end = 12.dp),
+                    )
+                }
+                if (onOpenSource != null) {
+                    Action(
+                        if (sourceIsThread) Icons.Outlined.ChatBubbleOutline else Icons.Outlined.OpenInNew,
+                        if (sourceIsThread) "Open discussion" else "Open source",
+                        tint = Color.White,
+                        onClick = onOpenSource,
                     )
                 }
             }

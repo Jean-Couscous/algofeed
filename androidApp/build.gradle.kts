@@ -21,6 +21,10 @@ android {
         versionName = providers.gradleProperty("algofeed.versionName").orNull ?: "0.1.0"
     }
 
+    // The embedding model + vocab are bundled as assets (fetched at build time, see :shared).
+    // A plain path (not a Provider) is required here; the task dependency is wired below.
+    sourceSets["main"].assets.srcDir(project(":shared").layout.buildDirectory.dir("embedding").get().asFile)
+
     // The upload key lives outside the repo. To use one, add to ~/.gradle/gradle.properties:
     //   algofeed.release.storeFile=/absolute/path/to/upload.jks
     //   algofeed.release.storePassword=…
@@ -54,6 +58,9 @@ android {
         unitTests.all { it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }
     }
 }
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach { dependsOn(":shared:prepareEmbeddingAssets") }
 
 dependencies {
     implementation(project(":shared"))

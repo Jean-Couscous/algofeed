@@ -7,9 +7,13 @@ import algofeed.data.buildAlgofeed
 import algofeed.fetch.HackerNews
 import algofeed.fetch.createHttpClient
 import algofeed.fetch.defaultSources
+import algofeed.rank.DisabledEmbedder
+import algofeed.rank.Embedder
+import algofeed.rank.OnnxEmbedder
 import algofeed.reader.createReaderExtractor
 import android.app.Application
 import androidx.room.Room
+import java.io.File
 import kotlinx.coroutines.MainScope
 
 class AlgofeedApplication : Application(), RefreshHost {
@@ -35,8 +39,18 @@ class AlgofeedApplication : Application(), RefreshHost {
             defaults = Settings(refreshMinutes = 60),
             hackerNews = HackerNews(client),
             mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
+            embedder = loadEmbedder(),
         )
     }
+
+    /** Copies the bundled model out of the APK once, then loads it for memory-mapped inference. */
+    private fun loadEmbedder(): Embedder = runCatching {
+        val model = File(filesDir, "model_quantized.onnx")
+        if (!model.exists()) assets.open("model_quantized.onnx").use { i -> model.outputStream().use { i.copyTo(it) } }
+        assets.open("tokenizer.vocab").bufferedReader().useLines { lines ->
+            OnnxEmbedder.create(model.absolutePath, lines)
+        }
+    }.getOrElse { DisabledEmbedder }
 
     override suspend fun refreshInBackground() {
         repository.refreshAll()
