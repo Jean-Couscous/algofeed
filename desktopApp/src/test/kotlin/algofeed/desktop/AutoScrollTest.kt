@@ -78,7 +78,7 @@ class AutoScrollTest {
         val wide = ImageComposeScene(1200, 600, Density(1f)) {
             EntryList(
                 items = entries, feeds = emptyMap(), listState = list, focused = -1, openId = null, showWhy = false,
-                onOpen = {}, onExternal = {}, onFavorite = {}, onBookmark = {}, onDismiss = {},
+                onOpen = {}, onExternal = {}, onLike = {}, onBookmark = {}, onDismiss = {},
                 modifier = Modifier.fillMaxSize(), maxItemWidth = 400.dp,
             )
         }

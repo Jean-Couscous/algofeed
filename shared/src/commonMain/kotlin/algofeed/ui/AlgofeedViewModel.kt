@@ -233,10 +233,14 @@ class AlgofeedViewModel(
         }
     }
 
+    /** Opens the search view with an empty query, ready for typing. */
+    fun openSearch() = show(StreamView.Search(""))
+
     fun search(query: String) {
         val q = query.trim()
         when {
-            q.isEmpty() -> show(StreamView.Home)
+            // An empty query inside the search view keeps it open (cleared); elsewhere it returns Home.
+            q.isEmpty() -> show(if (_state.value.view is StreamView.Search) StreamView.Search("") else StreamView.Home)
             Urls.looksLikeUrl(q) -> openUrl(q)
             else -> show(StreamView.Search(q))
         }
@@ -274,16 +278,10 @@ class AlgofeedViewModel(
         viewModelScope.launch { repo.markViewed(batch) }
     }
 
-    fun toggleFavorite(entry: Entry) {
+    fun toggleLike(entry: Entry) {
         val on = entry.favoritedAt == null
-        val toggled = entry.copy(favoritedAt = if (on) nowMillis() else null)
-        updateEntries(setOf(entry.id)) { it.copy(favoritedAt = toggled.favoritedAt) }
-        viewModelScope.launch {
-            repo.setFavorite(entry, on)
-            if (_state.value.hnUser != null) {
-                runCatchingCancellable { repo.syncHnFavorite(entry, on) }.onFailure { notify("Hacker News: ${it.message}") }
-            }
-        }
+        updateEntries(setOf(entry.id)) { it.copy(favoritedAt = if (on) nowMillis() else null) }
+        viewModelScope.launch { repo.setLike(entry, on) }
     }
 
     fun toggleBookmark(entry: Entry) {

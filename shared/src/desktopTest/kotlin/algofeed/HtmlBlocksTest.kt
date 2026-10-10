@@ -30,6 +30,16 @@ class HtmlBlocksTest {
         assertEquals(listOf(null, null, null), blocks.map { it.description })
     }
 
+    @Test fun redditPreviewLinkBecomesAnImage() {
+        val blocks = images("""<p>look at this</p><p><a href="https://preview.redd.it/abc.png?width=640&amp;s=sig">https://preview.redd.it/abc.png</a></p>""")
+        assertEquals(listOf(Block.Image("https://preview.redd.it/abc.png?width=640&s=sig", null, null)), blocks)
+    }
+
+    @Test fun inlinePreviewLinkInProseStaysALink() {
+        val blocks = images("""<p>see <a href="https://preview.redd.it/abc.png?s=sig">this</a> for details</p>""")
+        assertTrue(blocks.isEmpty())
+    }
+
     @Test fun longAltTextIsShortenedForTheLink() {
         val alt = "Screenshot of a retro pixel-art music player. A large scene shows a harbor at night under a purple sky."
         val image = images("""<img src="https://site.example/s.png" alt="$alt">""").single()

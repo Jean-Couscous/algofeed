@@ -7,6 +7,8 @@ import algofeed.data.MediaKind
 import algofeed.util.Urls
 import algofeed.util.relativeTime
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -29,12 +31,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -51,6 +53,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInRoot
@@ -58,9 +61,11 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun ReaderPane(
@@ -68,7 +73,7 @@ fun ReaderPane(
     feed: Feed?,
     narrow: Boolean,
     onClose: () -> Unit,
-    onFavorite: () -> Unit,
+    onLike: () -> Unit,
     onBookmark: () -> Unit,
     onExternal: () -> Unit,
     onToggleSource: () -> Unit,
@@ -109,7 +114,23 @@ fun ReaderPane(
         }
     }
     LaunchedEffect(entry?.id, reader.url) { scroll.scrollTo(0) }
-    Column(modifier.fillMaxSize()) {
+    // On a phone the reader fills the screen; a left swipe dismisses it back to the feed.
+    val swipeToClose = narrow && LocalTouchUi.current
+    var dragDx by remember(entry?.id, reader.url) { mutableStateOf(0f) }
+    Column(
+        modifier.fillMaxSize().then(
+            if (swipeToClose) Modifier
+                .offset { IntOffset(dragDx.roundToInt(), 0) }
+                .pointerInput(entry?.id, reader.url) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, delta -> dragDx = (dragDx + delta).coerceAtMost(0f); change.consume() },
+                        onDragEnd = { if (dragDx < -size.width * 0.25f) onClose() else dragDx = 0f },
+                        onDragCancel = { dragDx = 0f },
+                    )
+                }
+            else Modifier
+        )
+    ) {
         Row(
             Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -140,10 +161,10 @@ fun ReaderPane(
             }
             if (entry != null) {
                 Action(
-                    if (entry.favoritedAt != null) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                    if (entry.favoritedAt != null) "Remove from favorites" else "Favorite",
-                    tint = if (entry.favoritedAt != null) LocalExtraColors.current.favorite else null,
-                    onClick = onFavorite,
+                    if (entry.favoritedAt != null) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    if (entry.favoritedAt != null) "Unlike" else "Like",
+                    tint = if (entry.favoritedAt != null) LocalExtraColors.current.like else null,
+                    onClick = onLike,
                 )
                 BookmarkAction(entry, onBookmark)
             }

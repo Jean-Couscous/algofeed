@@ -5,8 +5,10 @@ import algofeed.Settings
 import algofeed.data.AppDatabase
 import algofeed.data.buildAlgofeed
 import algofeed.fetch.HackerNews
+import algofeed.fetch.RateLimiter
 import algofeed.fetch.createHttpClient
 import algofeed.fetch.defaultSources
+import algofeed.rateLimitStore
 import algofeed.rank.DisabledEmbedder
 import algofeed.rank.Embedder
 import algofeed.rank.OnnxEmbedder
@@ -29,7 +31,8 @@ class AlgofeedApplication : Application(), RefreshHost {
 
     val repository: Repository by lazy {
         val db = Room.databaseBuilder<AppDatabase>(this, getDatabasePath("algofeed.db").absolutePath).buildAlgofeed()
-        val client = createHttpClient()
+        val rateLimiter = RateLimiter(rateLimitStore(db))
+        val client = createHttpClient(rateLimiter)
         val secretStore = KeystoreSecretStore(secretsDataStore)
         val secrets = algofeed.SecretReader { secretStore.secret(it) }
         Repository(
@@ -40,6 +43,7 @@ class AlgofeedApplication : Application(), RefreshHost {
             hackerNews = HackerNews(client),
             mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
             embedder = loadEmbedder(),
+            rateLimiter = rateLimiter,
         )
     }
 

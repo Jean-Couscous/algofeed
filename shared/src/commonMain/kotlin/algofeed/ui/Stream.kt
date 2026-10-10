@@ -37,13 +37,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.HorizontalDivider
@@ -86,7 +86,7 @@ fun EntryList(
     showWhy: Boolean,
     onOpen: (Entry) -> Unit,
     onExternal: (Entry) -> Unit,
-    onFavorite: (Entry) -> Unit,
+    onLike: (Entry) -> Unit,
     onBookmark: (Entry) -> Unit,
     onDismiss: (Entry) -> Unit,
     modifier: Modifier = Modifier,
@@ -125,7 +125,7 @@ fun EntryList(
                     autoPlayVideo = ranked.entry.id == activeVideoId,
                     onOpen = { onOpen(ranked.entry) },
                     onExternal = { onExternal(ranked.entry) },
-                    onFavorite = { onFavorite(ranked.entry) },
+                    onLike = { onLike(ranked.entry) },
                     onBookmark = { onBookmark(ranked.entry) },
                     onDismiss = { onDismiss(ranked.entry) },
                     upvoted = hnVoted(ranked.entry),
@@ -146,7 +146,7 @@ private fun EntryRow(
     autoPlayVideo: Boolean,
     onOpen: () -> Unit,
     onExternal: () -> Unit,
-    onFavorite: () -> Unit,
+    onLike: () -> Unit,
     onBookmark: () -> Unit,
     onDismiss: () -> Unit,
     upvoted: Boolean?,
@@ -237,10 +237,10 @@ private fun EntryRow(
                 Action(Icons.Outlined.OpenInNew, "Open in browser") { onExternal(); uri.openUri(url) }
             }
             Action(
-                if (entry.favoritedAt != null) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                if (entry.favoritedAt != null) "Remove from favorites" else "Favorite",
-                tint = if (entry.favoritedAt != null) LocalExtraColors.current.favorite else null,
-                onClick = onFavorite,
+                if (entry.favoritedAt != null) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                if (entry.favoritedAt != null) "Unlike" else "Like",
+                tint = if (entry.favoritedAt != null) LocalExtraColors.current.like else null,
+                onClick = onLike,
             )
             BookmarkAction(entry, onBookmark)
             upvoted?.let { on ->

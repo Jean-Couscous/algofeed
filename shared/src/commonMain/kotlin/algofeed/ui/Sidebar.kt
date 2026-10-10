@@ -39,7 +39,6 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.PermMedia
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -88,7 +87,6 @@ fun Sidebar(
         val listState = rememberLazyListState()
         LazyColumn(Modifier.weight(1f).mouseScrolling(listState), state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item { NavRow(Icons.Outlined.Home, "Home", view == StreamView.Home) { onSelect(StreamView.Home) } }
-            item { NavRow(Icons.Outlined.StarOutline, "Favorites", view == StreamView.Favorites) { onSelect(StreamView.Favorites) } }
             item { NavRow(Icons.Outlined.BookmarkBorder, "Bookmarks", view == StreamView.Bookmarks) { onSelect(StreamView.Bookmarks) } }
             item { NavRow(Icons.Outlined.PermMedia, "Media", view == StreamView.Media) { onSelect(StreamView.Media) } }
             item {

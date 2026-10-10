@@ -53,7 +53,7 @@ class RepositoryTest {
         // Engagement with Rust content lifts the matching entry above fresher ones.
         val rust = stream.first { it.entry.title?.contains("Rust") == true }.entry
         repo.markOpened(rust)
-        repo.setFavorite(rust, true)
+        repo.setLike(rust, true)
         assertTrue(affinity(rust.id) > 0)
 
         // Opened entries leave the home stream, and so do entries scrolled past (feedi behaviour).
@@ -62,7 +62,7 @@ class RepositoryTest {
         repo.markViewed(listOf(skipped))
         assertTrue(repo.stream(StreamView.Home, Settings()).none { it.entry.id == skipped.id })
         assertEquals(1, db.feeds().get(rust.feedId)!!.impressions)
-        assertEquals(1, repo.stream(StreamView.Favorites, Settings()).size)
+        assertTrue(db.entries().get(rust.id)!!.favoritedAt != null) // the like is recorded
     }
 
     @Test fun coldStartLeadsWithNewest() = runTest {
@@ -121,7 +121,7 @@ class RepositoryTest {
         // Engage with alice, reject bob.
         for (id in listOf("a1", "a2")) {
             repo.markOpened(byRemote.getValue(id))
-            repo.setFavorite(byRemote.getValue(id), true)
+            repo.setLike(byRemote.getValue(id), true)
         }
         for (id in listOf("b1", "b2")) repo.setDismissed(byRemote.getValue(id), true)
 

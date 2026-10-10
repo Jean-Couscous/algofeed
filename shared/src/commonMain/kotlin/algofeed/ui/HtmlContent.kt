@@ -1,5 +1,6 @@
 package algofeed.ui
 
+import algofeed.util.Urls
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -97,6 +98,14 @@ object HtmlBlocks {
 
     fun parse(html: String, baseUrl: String, colors: LinkColors): List<Block> {
         val doc = Ksoup.parse(html, baseUrl)
+        // Reddit posts a preview.redd.it image as a bare link on its own line; show it like any other image.
+        for (a in doc.select("a[href]")) {
+            val href = a.absUrl("href")
+            if (!Urls.isRedditPreview(href)) continue
+            val parent = a.parent() ?: continue
+            if (parent.text().trim() != a.text().trim()) continue
+            a.replaceWith(Element("img").attr("src", href))
+        }
         val out = ArrayList<Block>()
         Walker(out, colors).walkChildren(doc.body(), quote = false, listDepth = 0)
         return out.filterNot { it is Block.Paragraph && it.text.isBlank() }

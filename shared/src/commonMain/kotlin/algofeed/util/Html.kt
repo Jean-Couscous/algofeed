@@ -45,10 +45,15 @@ object Urls {
 
     private val imageExtensions = setOf("jpg", "jpeg", "png", "gif", "webp", "avif")
 
+    /** Reddit's image preview CDN. Links carry a signed query, so they keep the extension before the `?`. */
+    fun isRedditPreview(url: String?): Boolean =
+        host(url).let { it == "preview.redd.it" || it == "preview.reddit.com" }
+
     /** A direct link to an image file, such as a Reddit or Imgur image post. */
     fun isImage(url: String?): Boolean {
         val path = url?.substringBefore('#')?.substringBefore('?') ?: return false
-        return path.substringAfterLast('/').substringAfterLast('.', "").lowercase() in imageExtensions
+        if (path.substringAfterLast('/').substringAfterLast('.', "").lowercase() in imageExtensions) return true
+        return isRedditPreview(url)
     }
 
     /** A page that is a gallery or video rather than an article: Reddit galleries and hosted videos. */

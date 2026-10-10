@@ -30,6 +30,11 @@ class UrlsTest {
         assertTrue(Urls.isImage("https://i.imgur.com/abc.PNG?1"))
         assertFalse(Urls.isImage("https://example.com/post.html"))
         assertFalse(Urls.isImage("https://example.com/jpeg/"))
+        // Reddit preview links keep their extension before the signed query, but the host counts regardless.
+        assertTrue(Urls.isImage("https://preview.redd.it/abc.png?width=640&format=png&s=sig"))
+        assertTrue(Urls.isImage("https://preview.redd.it/abc?width=640&s=sig"))
+        assertTrue(Urls.isRedditPreview("https://preview.reddit.com/abc.jpg"))
+        assertFalse(Urls.isRedditPreview("https://i.redd.it/abc.jpg"))
         assertTrue(Urls.isMediaPage("https://www.reddit.com/gallery/1x06c5i"))
         assertTrue(Urls.isMediaPage("https://v.redd.it/abc123"))
         assertFalse(Urls.isMediaPage("https://www.reddit.com/r/x/comments/a/b/"))

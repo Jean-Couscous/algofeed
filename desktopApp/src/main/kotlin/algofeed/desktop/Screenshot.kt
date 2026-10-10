@@ -5,8 +5,10 @@ import algofeed.Settings
 import algofeed.StreamView
 import algofeed.data.AppDatabase
 import algofeed.data.buildAlgofeed
+import algofeed.fetch.RateLimiter
 import algofeed.fetch.createHttpClient
 import algofeed.fetch.defaultSources
+import algofeed.rateLimitStore
 import algofeed.reader.createReaderExtractor
 import algofeed.ui.AlgofeedApp
 import algofeed.ui.AlgofeedViewModel
@@ -34,9 +36,11 @@ fun main(args: Array<String>): Unit = runBlocking {
     val dbFile = File(args[0])
     val out = File(args[1]).apply { mkdirs() }
     val db = Room.databaseBuilder<AppDatabase>(name = dbFile.absolutePath).buildAlgofeed()
-    val client = createHttpClient()
+    val rateLimiter = RateLimiter(rateLimitStore(db))
+    val client = createHttpClient(rateLimiter)
     val repo = Repository(
         db, defaultSources(client), createReaderExtractor(client),
+        rateLimiter = rateLimiter,
     )
 
     // ALGOFEED_TRACE_REFRESH=1: run one full refresh, print each progress step with timings, and exit.

@@ -25,7 +25,7 @@ Algofeed puts everything you subscribe to (blogs, Reddit, Hacker News, Mastodon,
 ## Features
 
 - **One ranked Home** — mixes freshness, quiet feeds, the feeds and authors you engage with, and how close a post is to your interests, matched semantically across languages by an on-device embedding model. Each entry's info button shows why it ranks where it does.
-- **Learns from use** — opening, reading for 30 seconds, favoriting and bookmarking pull related entries up; "Show less like this" and scrolling past push them down.
+- **Learns from use** — opening, reading for 30 seconds, liking and bookmarking pull related entries up; "Show less like this" and scrolling past push them down.
 - **Many sources** — RSS, Atom and RDF; Reddit subreddits and public custom feeds; Hacker News; Kagi News; Lobsters; Mastodon accounts and hashtags; YouTube channels.
 - **Reader view** — articles extracted to clean text, comment threads for Hacker News and Reddit, and image posts shown as images.
 - **Hacker News account** — optional login to upvote, reply and comment from the reader.
@@ -102,7 +102,7 @@ Pasting a URL into the search box opens it in the reader without subscribing. On
 | `o`, `Enter` | open in the reader |
 | `v` | open the link in the browser |
 | `c` | open the discussion |
-| `f` / `b` | favorite / bookmark |
+| `f` / `b` | like / bookmark |
 | `x` | show less like this |
 | `r` | check feeds now |
 | `/` | search |
@@ -110,12 +110,12 @@ Pasting a URL into the search box opens it in the reader without subscribing. On
 
 ### Hacker News and Reddit
 
-- **Hacker News** threads load under the article. Logging in under Settings → Hacker News account adds upvote buttons, replies and a comment box, and favoriting an HN story in Algofeed also favorites it on HN. HN has no write API, so this drives the website's own login form and links, and can break when HN changes its pages. The password isn't stored.
+- **Hacker News** threads load under the article. Logging in under Settings → Hacker News account adds upvote buttons, replies and a comment box. HN has no write API, so this drives the website's own login form and links, and can break when HN changes its pages. The password isn't stored.
 - **Reddit** comments are read-only. Reddit often refuses its API to apps without an account; comments then come from the thread's RSS feed, which doesn't say which comment replies to which, so they show as a flat list.
 
 ### Data
 
-Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algofeed/algofeed.db` (by default `~/.local/share/algofeed/algofeed.db`); set `ALGOFEED_DB` to use another file. Settings → Subscriptions exports OPML, which carries your feeds and folders but not favorites, bookmarks or learned interests.
+Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algofeed/algofeed.db` (by default `~/.local/share/algofeed/algofeed.db`); set `ALGOFEED_DB` to use another file. Settings → Subscriptions exports OPML, which carries your feeds and folders but not likes, bookmarks or learned interests.
 
 Secrets (the Hacker News session cookie, the Tumblr and Nexus Mods API keys, MangaDex tokens) are kept out of the database. On Android they are encrypted with a key held in the Android Keystore. On Linux they go to the OS keyring through the Secret Service API, which both GNOME Keyring and KWallet provide (via `secret-tool` from libsecret); if no keyring is running they fall back to the database.
 

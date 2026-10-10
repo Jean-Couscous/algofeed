@@ -4,16 +4,18 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.request
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 
 const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0 Algofeed/0.1"
 
-fun createHttpClient(): HttpClient = HttpClient {
+fun createHttpClient(rateLimiter: RateLimiter? = null): HttpClient = HttpClient {
     followRedirects = true
     install(HttpTimeout) {
         requestTimeoutMillis = 30_000
@@ -26,6 +28,13 @@ fun createHttpClient(): HttpClient = HttpClient {
         retryOnServerErrors(maxRetries = 2)
         retryIf { _, response -> response.status == HttpStatusCode.TooManyRequests }
         exponentialDelay(respectRetryAfterHeader = true)
+    }
+    if (rateLimiter != null) {
+        // Only responses that carry a rate-limit header are observed, so the body isn't buffered elsewhere.
+        install(ResponseObserver) {
+            filter { call -> call.response.headers.names().any { it.startsWith("X-Ratelimit", true) || it.startsWith("X-RL-", true) || it.equals("RateLimit-Remaining", true) } }
+            onResponse { response -> rateLimiter.record(response.request.url.host, response.headers) }
+        }
     }
     defaultRequest {
         header(HttpHeaders.UserAgent, USER_AGENT)

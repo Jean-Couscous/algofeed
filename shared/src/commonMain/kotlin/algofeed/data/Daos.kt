@@ -105,9 +105,6 @@ interface EntryDao {
     @Query("SELECT * FROM entry WHERE bookmarkedAt IS NOT NULL ORDER BY bookmarkedAt DESC")
     suspend fun bookmarks(): List<Entry>
 
-    @Query("SELECT * FROM entry WHERE favoritedAt IS NOT NULL ORDER BY favoritedAt DESC")
-    suspend fun favorites(): List<Entry>
-
     /** Entries carrying a gallery or a thumbnail image, newest first — for the Media grid. */
     @Query(
         """SELECT entry.* FROM entry JOIN feed ON feed.id = entry.feedId

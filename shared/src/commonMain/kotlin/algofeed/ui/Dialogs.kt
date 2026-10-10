@@ -193,7 +193,7 @@ fun EditFeedDialog(
                     Text("Last update failed: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    "Seen ${feed.impressions}, opened ${feed.opens}, favorited ${feed.favorites}, hidden ${feed.dismissals}",
+                    "Seen ${feed.impressions}, opened ${feed.opens}, liked ${feed.favorites}, hidden ${feed.dismissals}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -297,8 +297,8 @@ private fun HnAccountSection(hn: HnAccountActions) {
         return
     }
     Text(
-        "Log in to upvote, favorite and comment on Hacker News stories from the reader. Favorites you set here are " +
-            "also set on HN. The password is sent only to news.ycombinator.com and isn't stored.",
+        "Log in to upvote and comment on Hacker News stories from the reader. The password is sent only to " +
+            "news.ycombinator.com and isn't stored.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -422,7 +422,7 @@ fun SettingsDialog(
     ) {
         Section("Home")
         Text(
-            "Home leads with the newest posts and lifts the feeds, authors and topics you open, favorite and " +
+            "Home leads with the newest posts and lifts the feeds, authors and topics you open, like and " +
                 "hide. Tap \"Why this entry is here\" on any card to see how it was ranked.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -478,7 +478,7 @@ fun SettingsDialog(
         HorizontalDivider()
         Section("Backup")
         Text(
-            "Save subscriptions, settings and learned interests to a file, or restore them on another device. Stored posts, bookmarks and favorites are not included; they come back as feeds refresh.",
+            "Save subscriptions, settings and learned interests to a file, or restore them on another device. Stored posts, bookmarks and likes are not included; they come back as feeds refresh.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -505,7 +505,7 @@ fun SettingsDialog(
             title = { Text("Remove all subscriptions and reset?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("This deletes every feed and folder, all stored entries including bookmarks and favorites, and the interests learned from what you read. It can't be undone.")
+                    Text("This deletes every feed and folder, all stored entries including bookmarks and likes, and the interests learned from what you read. It can't be undone.")
                     Text("Your settings and Hacker News login are kept. Export your subscriptions first if you may want them back.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton(onClick = onExport, enabled = !working) { Text("Export OPML first") }
                 }

@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Menu
@@ -211,11 +212,11 @@ private fun AppContent(
             Key.O, Key.Enter -> entry?.let(vm::open) ?: return false
             Key.V -> entry?.url?.let { vm.openedExternally(entry); uri.openUri(it) } ?: return false
             Key.C -> entry?.commentsUrl?.let { vm.openedExternally(entry); uri.openUri(it) } ?: return false
-            Key.F -> entry?.let(vm::toggleFavorite) ?: return false
+            Key.F -> entry?.let(vm::toggleLike) ?: return false
             Key.B -> entry?.let(vm::toggleBookmark) ?: return false
             Key.X -> entry?.let(vm::dismiss) ?: return false
             Key.R -> vm.refresh(manual = true)
-            Key.Slash -> searchFocus.requestFocus()
+            Key.Slash -> vm.openSearch()
             Key.Escape -> when {
                 state.viewer != null -> vm.closeViewer()
                 state.reader.open -> vm.closeReader()
@@ -273,6 +274,8 @@ private fun AppContent(
                             searchFocus = searchFocus,
                             onMenu = { scope.launch { drawer.open() } },
                             onSearch = vm::search,
+                            onOpenSearch = vm::openSearch,
+                            onExitSearch = { vm.show(StreamView.Home) },
                             onTyping = { typing = it },
                             onRefresh = { vm.refresh(manual = true) },
                             onShowNew = vm::reload,
@@ -284,6 +287,12 @@ private fun AppContent(
                     state.items.isEmpty() && state.view == StreamView.Bookmarks -> EmptyState(
                         title = "Save entries for later",
                         body = "Bookmark entries to find them again here. Removing a bookmark doesn't affect the entry.",
+                    )
+                    state.items.isEmpty() && state.view is StreamView.Search -> EmptyState(
+                        title = if ((state.view as StreamView.Search).query.isBlank()) "Search your feeds" else "No matches",
+                        body = if ((state.view as StreamView.Search).query.isBlank())
+                            "Find stored entries by title, author or text — or paste a link to read it."
+                        else "Nothing here matches that search.",
                     )
                     state.items.isEmpty() -> EmptyState(
                         title = if (feeds.isEmpty()) "Nothing to read yet" else "You're all caught up",
@@ -311,7 +320,7 @@ private fun AppContent(
                             showWhy = state.view == StreamView.Home,
                             onOpen = vm::open,
                             onExternal = vm::openedExternally,
-                            onFavorite = { vm.toggleFavorite(it) },
+                            onLike = { vm.toggleLike(it) },
                             onBookmark = vm::toggleBookmark,
                             onDismiss = vm::dismiss,
                             hnVoted = { e -> if (state.hnUser == null) null else HackerNews.itemId(e.commentsUrl)?.let { state.hnVoted(it) } },
@@ -349,7 +358,7 @@ private fun AppContent(
                 feed = state.reader.entry?.let { feedMap[it.feedId] },
                 narrow = !wide,
                 onClose = vm::closeReader,
-                onFavorite = { state.reader.entry?.let { vm.toggleFavorite(it) } },
+                onLike = { state.reader.entry?.let { vm.toggleLike(it) } },
                 onBookmark = { state.reader.entry?.let(vm::toggleBookmark) },
                 onExternal = { state.reader.entry?.let(vm::openedExternally) },
                 onToggleSource = vm::toggleReaderSource,
@@ -473,41 +482,50 @@ private fun StreamHeader(
     searchFocus: FocusRequester,
     onMenu: () -> Unit,
     onSearch: (String) -> Unit,
+    onOpenSearch: () -> Unit,
+    onExitSearch: () -> Unit,
     onTyping: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     onShowNew: () -> Unit,
 ) {
+    val searching = state.view is StreamView.Search
     var query by remember { mutableStateOf("") }
     LaunchedEffect(state.view) { if (state.view !is StreamView.Search) query = "" }
+    // The field exists only while searching; focus it when the view opens.
+    LaunchedEffect(searching) { if (searching) runCatching { searchFocus.requestFocus() } }
     Column {
-        Row(Modifier.fillMaxWidth().padding(start = if (showMenu) 4.dp else 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (showMenu) IconButton(onClick = onMenu) { Icon(Icons.Outlined.Menu, "Open navigation") }
-            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, modifier = Modifier.weight(1f))
-            IconButton(onClick = onRefresh, enabled = !state.refreshing) { Icon(Icons.Outlined.Refresh, "Check feeds now (r)") }
+        if (searching) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Search, or paste a link to read it") },
+                leadingIcon = { IconButton(onClick = onExitSearch) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                trailingIcon = if (query.isNotEmpty()) {
+                    { IconButton(onClick = { query = ""; onSearch("") }) { Icon(Icons.Outlined.Close, "Clear search") } }
+                } else null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = if (showMenu) 4.dp else 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
+                    .focusRequester(searchFocus)
+                    .onFocusChanged { onTyping(it.isFocused) }
+                    .onPreviewKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) {
+                            onSearch(query); true
+                        } else false
+                    },
+            )
+        } else {
+            Row(Modifier.fillMaxWidth().padding(start = if (showMenu) 4.dp else 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (showMenu) IconButton(onClick = onMenu) { Icon(Icons.Outlined.Menu, "Open navigation") }
+                Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, modifier = Modifier.weight(1f))
+                IconButton(onClick = onOpenSearch) { Icon(Icons.Outlined.Search, "Search (/)") }
+                IconButton(onClick = onRefresh, enabled = !state.refreshing) { Icon(Icons.Outlined.Refresh, "Check feeds now (r)") }
+            }
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text("Search, or paste a link to read it") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = if (query.isNotEmpty()) {
-                { IconButton(onClick = { query = ""; onSearch("") }) { Icon(Icons.Outlined.Close, "Clear search") } }
-            } else null,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .focusRequester(searchFocus)
-                .onFocusChanged { onTyping(it.isFocused) }
-                .onPreviewKeyEvent { e ->
-                    if (e.type == KeyEventType.KeyDown && e.key == Key.Enter) {
-                        onSearch(query); true
-                    } else false
-                },
-        )
         if (state.newAvailable > 0) {
             TextButton(onClick = onShowNew, modifier = Modifier.padding(horizontal = 12.dp)) {
                 Text("Show ${state.newAvailable} new ${if (state.newAvailable == 1) "entry" else "entries"}")
@@ -520,7 +538,6 @@ private fun StreamHeader(
 
 private fun title(view: StreamView, feeds: Map<Long, Feed>, folders: List<Folder>): String = when (view) {
     StreamView.Home -> "Home"
-    StreamView.Favorites -> "Favorites"
     StreamView.Bookmarks -> "Bookmarks"
     StreamView.Media -> "Media"
     is StreamView.OfFeed -> feeds[view.feedId]?.title ?: "Feed"

@@ -9,6 +9,13 @@ publishes a release; binaries are on the
 
 ### Added
 - Nexus Mods support through the official API: subscribe with `nexus:skyrimspecialedition` (optionally `/updated` or `/trending`) or a `nexusmods.com/<game>` URL to follow a game's newest, updated or trending mods. Needs a personal API key (from nexusmods.com/users/myaccount?tab=api; a free account's key works), set in Settings → Source keys. The RSS feeds stay blocked by an interactive Cloudflare challenge; the API is not.
+- Proactive per-host rate limiting: rate-limit response headers (Tumblr's `X-Ratelimit-*`, Nexus Mods' `X-RL-*`, the draft `RateLimit-*`) are read and a host's feeds are skipped for the cycle when it is near its quota, rather than waiting for a 429.
+- Reddit `preview.redd.it` image links posted on their own line in a thread or comment now render as images.
+- Swipe left to close an open thread on the phone and return to the feed.
+
+### Changed
+- Favorites are now a like (a heart). Liking only trains the ranking: the Favorites tab is gone, and a like no longer syncs to a Hacker News account.
+- Search moved from the always-visible bar to a search icon in the header that opens a dedicated search view; the manual-refresh button stays.
 
 ### Fixed
 - Opening a Reddit crosspost from the RSS fallback no longer fails with "Failed to connect to localhost". Reddit's RSS gives a crosspost's `[link]` as a site-relative path, which was stored verbatim and then fetched against `localhost:80`; it is now resolved against the thread permalink.

@@ -4,8 +4,10 @@ import algofeed.Repository
 import algofeed.data.AppDatabase
 import algofeed.data.buildAlgofeed
 import algofeed.fetch.HackerNews
+import algofeed.fetch.RateLimiter
 import algofeed.fetch.createHttpClient
 import algofeed.fetch.defaultSources
+import algofeed.rateLimitStore
 import algofeed.rank.DisabledEmbedder
 import algofeed.rank.Embedder
 import algofeed.rank.OnnxEmbedder
@@ -75,7 +77,8 @@ fun main() {
     migrateLegacyData(dataHome(), configHome())
     val dbFile = System.getenv("ALGOFEED_DB")?.let(::File) ?: File(dataDir(), "algofeed.db")
     val db = Room.databaseBuilder<AppDatabase>(name = dbFile.absolutePath).buildAlgofeed()
-    val client = createHttpClient()
+    val rateLimiter = RateLimiter(rateLimitStore(db))
+    val client = createHttpClient(rateLimiter)
     // Store secrets in the OS keyring via the Secret Service (GNOME Keyring / KWallet) when one is
     // reachable, moving any left in the settings table into it; otherwise keep the settings table.
     val secretStore = SecretServiceStore.createOrNull()
@@ -87,6 +90,7 @@ fun main() {
         hackerNews = HackerNews(client),
         mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
         embedder = loadEmbedder(),
+        rateLimiter = rateLimiter,
     )
 
     application {

@@ -28,7 +28,7 @@ import org.jetbrains.compose.resources.Font
 /** Colors the Material scheme has no slot for. */
 @Immutable
 data class ExtraColors(
-    val favorite: Color,
+    val like: Color,
     val selection: Color,
     val divider: Color,
 )
@@ -89,13 +89,13 @@ private val darkScheme = darkColorScheme(
 )
 
 private val lightExtra = ExtraColors(
-    favorite = Color(0xFFA86A12),
+    like = Color(0xFFC2405A),
     selection = Color(0xFFE2EAF3),
     divider = Color(0xFFDCE0E5),
 )
 
 private val darkExtra = ExtraColors(
-    favorite = Color(0xFFE8B45A),
+    like = Color(0xFFEC9AAE),
     selection = Color(0xFF1F2E3C),
     divider = Color(0xFF2A3137),
 )

@@ -8,7 +8,7 @@ val KEYBOARD_SHORTCUTS = listOf(
     Shortcut("O or Enter", "Open the focused entry"),
     Shortcut("V", "Open its link in the browser"),
     Shortcut("C", "Open its comments in the browser"),
-    Shortcut("F", "Favorite"),
+    Shortcut("F", "Like"),
     Shortcut("B", "Bookmark"),
     Shortcut("X", "Dismiss"),
     Shortcut("R", "Refresh feeds"),

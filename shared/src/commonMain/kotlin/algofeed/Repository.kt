@@ -14,6 +14,8 @@ import algofeed.fetch.HackerNewsException
 import algofeed.fetch.HnItemPage
 import algofeed.fetch.CommentThread
 import algofeed.fetch.FourChanAdapter
+import algofeed.fetch.RateLimitStore
+import algofeed.fetch.RateLimiter
 import algofeed.fetch.Sources
 import algofeed.opml.Opml
 import algofeed.rank.Buckets
@@ -47,12 +49,17 @@ import kotlinx.serialization.json.Json
 
 sealed interface StreamView {
     data object Home : StreamView
-    data object Favorites : StreamView
     data object Bookmarks : StreamView
     data object Media : StreamView
     data class OfFeed(val feedId: Long) : StreamView
     data class OfFolder(val folderId: Long) : StreamView
     data class Search(val query: String) : StreamView
+}
+
+/** Backs the rate limiter's per-host quota with the settings table (no schema migration needed). */
+fun rateLimitStore(db: AppDatabase): RateLimitStore = object : RateLimitStore {
+    override suspend fun load(host: String): String? = db.settings().get("ratelimit.$host")?.ifBlank { null }
+    override suspend fun save(host: String, json: String) = db.settings().put(Setting("ratelimit.$host", json))
 }
 
 /** Refresh progress: [done] of [total] feeds fetched. */
@@ -75,6 +82,8 @@ class Repository(
     private val mangadexAuth: algofeed.fetch.MangadexAuth? = null,
     /** On-device content embedder; [DisabledEmbedder] (the default) leaves the content signal at 0. */
     private val embedder: Embedder = DisabledEmbedder,
+    /** Proactive per-host rate limiting; null skips the check (feeds still rely on the 429 retry). */
+    private val rateLimiter: RateLimiter? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val profileMutex = Mutex()
@@ -175,17 +184,6 @@ class Repository(
         hn.follow(url, session)
     }
 
-    /** Mirrors an in-app favorite onto the HN account when the entry is an HN story and someone is logged in. */
-    suspend fun syncHnFavorite(entry: Entry, on: Boolean) {
-        val hn = hackerNews ?: return
-        val itemId = HackerNews.itemId(entry.commentsUrl) ?: return
-        val session = hnSession() ?: return
-        val page = hn.itemPage(itemId, session)
-        if (page.favorited == on) return
-        val url = page.faveUrl ?: throw HackerNewsException("Hacker News didn't offer a favorite link. Are you still logged in?")
-        hn.follow(url, session)
-    }
-
     suspend fun hnReply(parentId: Long, storyId: Long, text: String, hmac: String? = null) =
         hackerNews!!.reply(parentId, storyId, text, requireHnSession(), hmac)
 
@@ -241,7 +239,9 @@ class Repository(
         val results = feeds.map { feed ->
             async {
                 gate.withPermit {
-                    val r = feed.id to runCatchingCancellable { refreshFeed(feed) }
+                    // A host near its quota is skipped this cycle (no error badge); it retries next cycle.
+                    val r = if (rateLimiter?.allow(Urls.host(feed.url)) == false) feed.id to Result.success(0)
+                    else feed.id to runCatchingCancellable { refreshFeed(feed) }
                     counter.withLock { onProgress(RefreshProgress(++done, total)) }
                     r
                 }
@@ -334,12 +334,11 @@ class Repository(
                 val candidates = if (settings.includeSeen) entries.candidatesIncludingSeen(since) else entries.candidates(since)
                 rank(candidates, settings)
             }
-            StreamView.Favorites -> entries.favorites().unranked()
             StreamView.Bookmarks -> entries.bookmarks().unranked()
             StreamView.Media -> entries.withMedia().unranked()
             is StreamView.OfFeed -> entries.byFeed(view.feedId).unranked()
             is StreamView.OfFolder -> entries.byFolder(view.folderId).unranked()
-            is StreamView.Search -> entries.search(view.query).unranked()
+            is StreamView.Search -> if (view.query.isBlank()) emptyList() else entries.search(view.query).unranked()
         }
     }
 
@@ -403,7 +402,9 @@ class Repository(
         if (before < LONG_READ_SECONDS && before + seconds >= LONG_READ_SECONDS) learn(listOf(entry), Signal.LongRead)
     }
 
-    suspend fun setFavorite(entry: Entry, on: Boolean) {
+    // Liking an entry. The `favoritedAt` column and the `favorites` affinity counters back likes; the
+    // name is kept so no DB migration is needed. A like trains the ranker and nothing else.
+    suspend fun setLike(entry: Entry, on: Boolean) {
         db.entries().setFavorited(entry.id, if (on) clock() else null)
         db.feeds().addStats(entry.feedId, favorites = if (on) 1 else -1)
         entry.authorKey()?.let { db.authorStats().addStats(entry.feedId, it, favorites = if (on) 1 else -1) }
