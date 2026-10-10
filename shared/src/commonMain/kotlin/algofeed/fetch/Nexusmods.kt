@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
@@ -90,6 +91,9 @@ class NexusmodsAdapter(private val client: HttpClient, private val secrets: Secr
         val mods = json.parseToJsonElement(body).jsonArray
         return mods.mapNotNull { element ->
             val o = element.jsonObject
+            // Hidden, under-moderation or login-gated mods come back as not available, with a placeholder
+            // name/summary ("log in to view this content"); skip them so they don't show as entries.
+            if (o["available"]?.jsonPrimitive?.booleanOrNull == false) return@mapNotNull null
             val id = o["mod_id"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
             val domain = o.str("domain_name") ?: return@mapNotNull null
             val timestamp = o.long(if (useUpdated) "updated_timestamp" else "created_timestamp")

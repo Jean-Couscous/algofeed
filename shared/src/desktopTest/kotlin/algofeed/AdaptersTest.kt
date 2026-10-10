@@ -358,7 +358,9 @@ class AdaptersTest {
         val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
         val result = sources.forFeed(feed).fetch(feed)
         assertIs<FetchResult.Fetched>(result)
+        // The unavailable, login-gated mod (id 9999) is dropped; only the two live mods remain.
         assertEquals(2, result.entries.size)
+        assertTrue(result.entries.none { it.remoteId == "9999" })
         val e = result.entries.first()
         assertEquals("266", e.remoteId)
         assertEquals("https://www.nexusmods.com/skyrimspecialedition/mods/266", e.url)

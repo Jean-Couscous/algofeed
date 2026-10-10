@@ -99,7 +99,9 @@ object Fixtures {
           "mod_id":266,"domain_name":"skyrimspecialedition","version":"4.3","created_timestamp":1600000000,
           "updated_timestamp":1791281000,"author":"Arthmoor","uploaded_by":"Arthmoor","status":"published","available":true},
         {"name":"SkyUI","summary":"Better menus","mod_id":12604,"domain_name":"skyrimspecialedition",
-          "created_timestamp":1500000000,"updated_timestamp":1500000500,"uploaded_by":"SkyUI Team","available":true}
+          "created_timestamp":1500000000,"updated_timestamp":1500000500,"uploaded_by":"SkyUI Team","available":true},
+        {"name":"You must be logged in to view this content.","summary":"","mod_id":9999,"domain_name":"skyrimspecialedition",
+          "created_timestamp":1600000050,"status":"under_moderation","available":false}
     ]"""
 
     /** A client that serves [routes] (URL prefix → body) and 404s everything else. */
