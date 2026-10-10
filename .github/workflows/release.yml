@@ -3,6 +3,7 @@
 #  - the desktop app as an AppImage (bundles Java 21),
 #  - the desktop app as an Arch Linux package (uses Arch's jre21-openjdk).
 # Manual runs can instead attach desktop packages to an existing release (input attach_to).
+# After a new release publishes, older releases and their tags are pruned, keeping only the latest.
 # Signing needs four repository secrets: ALGOFEED_KEYSTORE_BASE64 (the .jks file, base64),
 # ALGOFEED_STORE_PASSWORD, ALGOFEED_KEY_ALIAS and ALGOFEED_KEY_PASSWORD.
 name: Release
@@ -173,3 +174,16 @@ jobs:
           gh release upload "$TAG" \
             "packaging/arch/$pkg" packaging/arch/algofeed.db packaging/arch/algofeed.db.tar.gz \
             --clobber --repo "$GITHUB_REPOSITORY"
+
+      # Keep only the release just published; drop older ones and their tags so the Releases page
+      # holds a single current build. Skipped when manually attaching to an existing release.
+      # Never deletes TAG, so the next push still derives the next version from it.
+      - name: Prune old releases
+        if: inputs.attach_to == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.desktop.outputs.tag }}
+        run: |
+          gh release list --limit 1000 --json tagName --jq '.[].tagName' --repo "$GITHUB_REPOSITORY" \
+            | grep -vxF "$TAG" \
+            | xargs -r -n1 gh release delete --cleanup-tag --yes --repo "$GITHUB_REPOSITORY"
