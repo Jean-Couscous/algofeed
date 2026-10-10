@@ -15,6 +15,7 @@ interface SecretStore {
     companion object {
         const val HN_SESSION_KEY = "hn.session"
         const val TUMBLR_API_KEY = "tumblr.apiKey"
+        const val NEXUSMODS_API_KEY = "nexusmods.apiKey"
         const val MANGADEX_CLIENT_ID = "mangadex.clientId"
         const val MANGADEX_CLIENT_SECRET = "mangadex.clientSecret"
         const val MANGADEX_REFRESH_TOKEN = "mangadex.refreshToken"

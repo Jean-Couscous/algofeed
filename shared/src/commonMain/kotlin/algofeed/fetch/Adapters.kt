@@ -366,6 +366,7 @@ fun defaultSources(client: HttpClient, secrets: algofeed.SecretReader? = null): 
             BlueskyAdapter(client),
             FourChanAdapter(client),
             TumblrAdapter(client, secrets),
+            NexusmodsAdapter(client, secrets),
             MangadexFollowsAdapter(client, MangadexAuth(client, secrets)),
             MangadexAdapter(client),
             rss,

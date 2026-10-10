@@ -90,6 +90,7 @@ The packages aren't signed, hence `TrustAll`. `releases/latest/download` always 
 | `lobsters`, `lobste.rs/t/rust` | Lobsters front page or tag |
 | `@user@server`, `#tag@server`, `https://server/@user` | Mastodon account or hashtag |
 | `youtube.com/@handle`, `/channel/UC…` | YouTube channel |
+| `nexus:skyrimspecialedition`, `/updated`, a `nexusmods.com/<game>` URL | Nexus Mods newest, updated or trending mods for a game (needs an API key) |
 
 Pasting a URL into the search box opens it in the reader without subscribing. On Android, sharing a link to Algofeed offers both. Each feed's edit dialog can make the reader always show the feed's own text instead of fetching the article page.
 
@@ -116,7 +117,7 @@ Pasting a URL into the search box opens it in the reader without subscribing. On
 
 Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algofeed/algofeed.db` (by default `~/.local/share/algofeed/algofeed.db`); set `ALGOFEED_DB` to use another file. Settings → Subscriptions exports OPML, which carries your feeds and folders but not favorites, bookmarks or learned interests.
 
-Secrets (the Hacker News session cookie, the Tumblr API key, MangaDex tokens) are kept out of the database. On Android they are encrypted with a key held in the Android Keystore. On Linux they go to the OS keyring through the Secret Service API, which both GNOME Keyring and KWallet provide (via `secret-tool` from libsecret); if no keyring is running they fall back to the database.
+Secrets (the Hacker News session cookie, the Tumblr and Nexus Mods API keys, MangaDex tokens) are kept out of the database. On Android they are encrypted with a key held in the Android Keystore. On Linux they go to the OS keyring through the Secret Service API, which both GNOME Keyring and KWallet provide (via `secret-tool` from libsecret); if no keyring is running they fall back to the database.
 
 ## Build from source
 

@@ -7,6 +7,9 @@ publishes a release; binaries are on the
 
 ## [Unreleased]
 
+### Added
+- Nexus Mods support through the official API: subscribe with `nexus:skyrimspecialedition` (optionally `/updated` or `/trending`) or a `nexusmods.com/<game>` URL to follow a game's newest, updated or trending mods. Needs a personal API key (from nexusmods.com/users/myaccount?tab=api; a free account's key works), set in Settings → Source keys. The RSS feeds stay blocked by an interactive Cloudflare challenge; the API is not.
+
 ### Fixed
 - Opening a Reddit crosspost from the RSS fallback no longer fails with "Failed to connect to localhost". Reddit's RSS gives a crosspost's `[link]` as a site-relative path, which was stored verbatim and then fetched against `localhost:80`; it is now resolved against the thread permalink.
 

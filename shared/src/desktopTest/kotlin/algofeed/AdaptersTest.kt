@@ -338,6 +338,51 @@ class AdaptersTest {
         assertEquals("https://64.media.tumblr.com/p.jpg", e.media.single().url)
     }
 
+    @Test fun nexusmodsNeedsAKey() = runTest {
+        val route = "https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/latest_added.json"
+        val sources = defaultSources(Fixtures.client(mapOf(route to Fixtures.nexusmods)))
+        val info = sources.resolve("nexus:skyrimspecialedition")
+        assertEquals("nexusmods", info.type)
+        assertEquals(route, info.url)
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        // No key configured: it fails cleanly rather than fetching.
+        assertFailsWith<algofeed.fetch.FetchException> { sources.forFeed(feed).fetch(feed) }
+    }
+
+    @Test fun nexusmodsWithKey() = runTest {
+        val route = "https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/latest_added.json"
+        val sources = defaultSources(Fixtures.client(mapOf(route to Fixtures.nexusmods))) {
+            if (it == SecretStore.NEXUSMODS_API_KEY) "key123" else null
+        }
+        val info = sources.resolve("nexus:skyrimspecialedition")
+        val feed = Feed(id = 1, type = info.type, url = info.url, title = info.title, createdAt = 0)
+        val result = sources.forFeed(feed).fetch(feed)
+        assertIs<FetchResult.Fetched>(result)
+        assertEquals(2, result.entries.size)
+        val e = result.entries.first()
+        assertEquals("266", e.remoteId)
+        assertEquals("https://www.nexusmods.com/skyrimspecialedition/mods/266", e.url)
+        assertEquals("Unofficial Patch", e.title)
+        assertEquals("Arthmoor", e.author)
+        assertEquals("https://staticdelivery.nexusmods.com/mods/1/p.jpg", e.thumbnailUrl)
+        // The newest variant sorts by created_timestamp.
+        assertEquals(1_600_000_000_000L, e.sortDate)
+    }
+
+    @Test fun nexusmodsRoutesUpdatedVariantAndRssUrls() = runTest {
+        val sources = defaultSources(Fixtures.client(emptyMap()))
+        // The /updated shorthand and the old RSS "updated" URL both resolve to the updated endpoint.
+        for (input in listOf("nexus:skyrimspecialedition/updated", "https://www.nexusmods.com/skyrimspecialedition/rss/updated")) {
+            val info = sources.resolve(input)
+            assertEquals("nexusmods", info.type)
+            assertEquals("https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/latest_updated.json", info.url)
+        }
+        // A plain mod-page URL claims the Nexus adapter (not the generic RSS fallback) and uses the newest endpoint.
+        val page = sources.resolve("https://www.nexusmods.com/fallout4/mods/1234")
+        assertEquals("nexusmods", page.type)
+        assertEquals("https://api.nexusmods.com/v1/games/fallout4/mods/latest_added.json", page.url)
+    }
+
     @Test fun redditSkipsJsonForAWhileAfterA403() = runTest {
         val rss = """<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>r/x</title>
             <entry><id>t3_a</id><title>Post</title><link href="https://www.reddit.com/r/x/comments/a/post/"/>

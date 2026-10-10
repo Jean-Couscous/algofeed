@@ -259,6 +259,23 @@ private fun SourceKeysSection(actions: SourceKeyActions) {
             modifier = Modifier.fillMaxWidth(),
         )
     }
+    Text(
+        "Following Nexus Mods games needs a Nexus Mods API key, your personal key from " +
+            "nexusmods.com/users/myaccount?tab=api. A free account's key works. It is kept on this device only.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    var nexusKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { nexusKey = actions.get(SecretStore.NEXUSMODS_API_KEY) ?: "" }
+    nexusKey?.let { current ->
+        OutlinedTextField(
+            current,
+            { actions.set(SecretStore.NEXUSMODS_API_KEY, it); nexusKey = it },
+            label = { Text("Nexus Mods API key") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 /** Hacker News login for the Settings dialog. */
