@@ -7,4 +7,7 @@
   Ktor client alike, even with the Firefox UA). Would need a browser engine to clear it.
   There is also no per-user Tracking Centre feed. Parked unless that changes.
 - 4chan: Archive fallback for deleted thread.
+- 4chan: Some thread don't have title and the app duplicate the body text instead. To fix it: Litteral <no-title> as title or just nothing at all. 
 - Apps crash when updating feeds.
+- Image/video viewer should also support comments.
+- Secrets should be stored in Kwallet/gnome-keyring/Pass on Linux and Android's native secrets manager.
