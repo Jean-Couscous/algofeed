@@ -96,6 +96,17 @@ class AdaptersTest {
         assertNull(e.summaryHtml)
     }
 
+    @Test fun redditRssCrosspostResolvesRelativeLink() = runTest {
+        // A crosspost's [link] is a site-relative path; it must be absolutized, not fetched against localhost.
+        val rss = """<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>r/x</title>
+            <entry><id>t3_a</id><title>Xpost</title><link href="https://www.reddit.com/r/x/comments/b/xpost/"/>
+            <updated>2026-10-06T10:00:00Z</updated><content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt; submitted by &lt;a href="https://www.reddit.com/user/bob"&gt; /u/bob &lt;/a&gt; &lt;span&gt;&lt;a href="/r/y/comments/a/orig/"&gt;[link]&lt;/a&gt;&lt;/span&gt; &lt;span&gt;&lt;a href="https://www.reddit.com/r/x/comments/b/xpost/"&gt;[comments]&lt;/a&gt;&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content></entry></feed>"""
+        val (_, entries) = fetchAll(mapOf("https://www.reddit.com/r/x/.rss" to rss), "r/x")
+        val e = entries.single()
+        assertEquals("https://www.reddit.com/r/y/comments/a/orig/", e.url)
+        assertEquals("https://www.reddit.com/r/x/comments/b/xpost/", e.commentsUrl)
+    }
+
     @Test fun reddit() = runTest {
         val (feed, entries) = fetchAll(mapOf("https://www.reddit.com/r/x/.json" to Fixtures.reddit), "r/x")
         assertEquals("reddit", feed.type)

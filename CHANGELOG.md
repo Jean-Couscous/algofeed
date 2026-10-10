@@ -7,6 +7,9 @@ publishes a release; binaries are on the
 
 ## [Unreleased]
 
+### Fixed
+- Opening a Reddit crosspost from the RSS fallback no longer fails with "Failed to connect to localhost". Reddit's RSS gives a crosspost's `[link]` as a site-relative path, which was stored verbatim and then fetched against `localhost:80`; it is now resolved against the thread permalink.
+
 ## [0.1.6] - 2026-10-10
 
 ### Added

@@ -4,6 +4,7 @@ import algofeed.data.Feed
 import algofeed.data.MediaItem
 import algofeed.data.MediaKind
 import algofeed.util.Html
+import algofeed.util.Urls
 import algofeed.util.nowMillis
 import kotlinx.coroutines.CancellationException
 import com.prof18.rssparser.RssParser
@@ -322,7 +323,10 @@ class RedditAdapter(
 
     private fun fromRss(draft: EntryDraft): EntryDraft {
         // Reddit RSS bodies end with "<a href=…>[link]</a> <a href=…>[comments]</a>".
-        val link = draft.contentHtml?.let { Regex("""<a href="([^"]+)">\[link]</a>""").find(it)?.groupValues?.get(1) }
+        // A crosspost's [link] is a site-relative path (/r/other/comments/…), so resolve it against the permalink.
+        val link = draft.contentHtml
+            ?.let { Regex("""<a href="([^"]+)">\[link]</a>""").find(it)?.groupValues?.get(1) }
+            ?.let { href -> draft.url?.let { Urls.resolve(it, href) } ?: href }
         return draft.copy(
             url = link ?: draft.url,
             commentsUrl = draft.url,
