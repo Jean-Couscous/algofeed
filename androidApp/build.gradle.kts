@@ -52,6 +52,19 @@ android {
         }
     }
 
+    // The ONNX Runtime AAR carries a native .so for every ABI; a universal APK ships all four. Split
+    // per ABI so a sideload downloads only its own, dropping the native-lib overhead (the ~112 MB
+    // embedding model asset is ABI-independent and stays in each). x86/armeabi-v7a are omitted: no
+    // real device needs them. No universal APK — CI uploads the per-ABI files.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric's FileDescriptor interceptor reflects into this JDK-internal package.

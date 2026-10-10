@@ -35,7 +35,7 @@ fun createHttpClient(): HttpClient = HttpClient {
 suspend fun HttpClient.getOk(url: String, block: io.ktor.client.request.HttpRequestBuilder.() -> Unit = {}): HttpResponse {
     val response = get(url, block)
     if (!response.status.isSuccess() && response.status.value != 304) {
-        throw FetchException("HTTP ${response.status.value} for $url")
+        throw FetchException("HTTP ${response.status.value} for $url", status = response.status.value)
     }
     return response
 }

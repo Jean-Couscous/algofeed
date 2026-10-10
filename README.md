@@ -39,7 +39,7 @@ Download from the [latest release](https://github.com/Jean-Couscous/algofeed/rel
 
 | Platform | File | Requirements |
 | --- | --- | --- |
-| Android | `algofeed-<version>.apk` | Android 8.0 or later |
+| Android | `algofeed-<version>.apk` | Android 8.0 or later, arm64 (any current phone) |
 | Arch Linux | `algofeed-<version>-1-x86_64.pkg.tar.zst` | x86_64; uses Arch's `jre21-openjdk` |
 | Other Linux | `Algofeed-<version>-x86_64.AppImage` | x86_64; bundles its own Java |
 
@@ -55,7 +55,7 @@ chmod +x Algofeed-<version>-x86_64.AppImage
 ./Algofeed-<version>-x86_64.AppImage
 ```
 
-On the phone itself, opening the APK works too; Android asks once to allow installs from the app you opened it with. There are no Windows or macOS builds; see [Build from source](#build-from-source).
+On the phone itself, opening the APK works too; Android asks once to allow installs from the app you opened it with. The APK is per-ABI: `algofeed-<version>.apk` is arm64-v8a; `algofeed-<version>-x86_64.apk` is for emulators. There are no Windows or macOS builds; see [Build from source](#build-from-source).
 
 ### Arch Linux, as a pacman repo
 
@@ -115,6 +115,8 @@ Pasting a URL into the search box opens it in the reader without subscribing. On
 ### Data
 
 Everything stays on the device. On desktop the database is `$XDG_DATA_HOME/algofeed/algofeed.db` (by default `~/.local/share/algofeed/algofeed.db`); set `ALGOFEED_DB` to use another file. Settings → Subscriptions exports OPML, which carries your feeds and folders but not favorites, bookmarks or learned interests.
+
+Secrets (the Hacker News session cookie, the Tumblr API key, MangaDex tokens) are kept out of the database. On Android they are encrypted with a key held in the Android Keystore. On Linux they go to the OS keyring through the Secret Service API, which both GNOME Keyring and KWallet provide (via `secret-tool` from libsecret); if no keyring is running they fall back to the database.
 
 ## Build from source
 

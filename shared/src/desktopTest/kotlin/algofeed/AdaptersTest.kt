@@ -243,6 +243,26 @@ class AdaptersTest {
         assertNull(video.imageUrl)
     }
 
+    @Test fun fourChanNoSubject() = runTest {
+        // A thread with no `sub` must not reuse its comment as the title (that duplicated the body).
+        val catalog = """[{"page":1,"threads":[
+            {"no":777,"com":"just the body text","time":1791281000,"name":"Anonymous"}
+        ]}]"""
+        val (_, entries) = fetchAll(mapOf("https://a.4cdn.org/g/catalog.json" to catalog), "4chan:g")
+        val e = entries.single()
+        assertEquals("/g/ thread 777", e.title)
+        assertEquals("just the body text", e.contentHtml)
+    }
+
+    @Test fun fourChanDeletedThread() = runTest {
+        // The thread 404s (nothing routed); the fallback links to a FoolFuuka archive for /g/.
+        val adapter = algofeed.fetch.FourChanAdapter(Fixtures.client(emptyMap()))
+        val thread = adapter.thread("https://boards.4chan.org/g/thread/999")
+        val notice = thread.comments.single()
+        assertNull(notice.author)
+        assertTrue(notice.html!!.contains("https://desuarchive.org/g/thread/999"))
+    }
+
     @Test fun mangadex() = runTest {
         val routes = mapOf(
             "https://api.mangadex.org/manga/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/feed" to Fixtures.mangadex,

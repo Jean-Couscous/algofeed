@@ -4,6 +4,7 @@ import algofeed.data.Feed
 import algofeed.data.MediaItem
 import algofeed.data.MediaKind
 import algofeed.util.Html
+import algofeed.util.nowMillis
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -67,7 +68,13 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
     /** The replies to one thread, read-only, from the keyless JSON API. The OP is shown by the reader. */
     suspend fun thread(threadUrl: String): CommentThread {
         val (board, no) = parseThreadUrl(threadUrl) ?: throw FetchException("Not a 4chan thread")
-        val posts = json.parseToJsonElement(client.getOk("https://a.4cdn.org/$board/thread/$no.json").bodyAsText())
+        // A deleted or pruned thread 404s here; point at a third-party archive instead of failing.
+        val body = try {
+            client.getOk("https://a.4cdn.org/$board/thread/$no.json").bodyAsText()
+        } catch (e: FetchException) {
+            if (e.status == 404) return archivedNotice(board, no) else throw e
+        }
+        val posts = json.parseToJsonElement(body)
             .jsonObject["posts"]?.jsonArray.orEmpty()
         // The first post is the OP; the rest are replies, flat (4chan has no reply tree).
         return CommentThread(posts.drop(1).map { post ->
@@ -96,9 +103,9 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
                 val no = o["no"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
                 val threadUrl = "https://boards.4chan.org/$board/thread/$no"
                 val com = o.str("com")
-                val subject = o.str("sub")?.let(Html::toText)
-                    ?: com?.let { Html.toText(it).take(80).ifBlank { null } }
-                    ?: "/$board/ thread $no"
+                // Many threads have no subject; the comment is the body, so reusing it as the title
+                // only duplicates the text. Label the title by board and number instead.
+                val subject = o.str("sub")?.let(Html::toText) ?: "/$board/ thread $no"
                 val media = image(o, board)
                 EntryDraft(
                     remoteId = no.toString(),
@@ -135,5 +142,37 @@ class FourChanAdapter(private val client: HttpClient) : SourceAdapter {
         )
     }
 
+    /**
+     * A one-comment stand-in for a thread 4chan no longer serves, linking to the FoolFuuka archive
+     * that covers the board when one is known. Boards without a known archive get a plain notice.
+     */
+    private fun archivedNotice(board: String, no: Long): CommentThread {
+        val archive = ARCHIVES.entries.firstOrNull { board in it.value }?.key
+        val html = if (archive != null) {
+            val link = "$archive/$board/thread/$no"
+            "This thread is no longer on 4chan (deleted or pruned). It may still be readable on an " +
+                "archive: <a href=\"$link\">$link</a>"
+        } else {
+            "This thread is no longer on 4chan (deleted or pruned), and no known archive covers /$board/."
+        }
+        return CommentThread(listOf(Comment(id = no, author = null, html = html, time = nowMillis())))
+    }
+
     private fun JsonObject.str(key: String) = this[key]?.jsonPrimitive?.takeIf { it.isString }?.content?.ifBlank { null }
+
+    companion object {
+        // Live FoolFuuka archives and the boards each keeps. A board in several archives takes the
+        // first listed. Coverage shifts over time; update as archives add or drop boards.
+        private val ARCHIVES = linkedMapOf(
+            "https://desuarchive.org" to setOf(
+                "a", "aco", "an", "c", "cgl", "co", "d", "fit", "g", "his", "int", "jp", "k", "m",
+                "mlp", "mu", "q", "qa", "r9k", "tg", "trash", "vr", "vrpg", "wsg",
+            ),
+            "https://arch.b4k.dev" to setOf("v", "vg", "vm", "vmg", "vp", "vst", "qb"),
+            "https://boards.4plebs.org" to setOf(
+                "adv", "f", "hr", "o", "pol", "s4s", "sp", "trv", "tv", "x",
+            ),
+            "https://archiveofsins.com" to setOf("h", "hc", "hm", "i", "lgbt", "r", "s", "soc", "t", "u", "y"),
+        )
+    }
 }

@@ -354,6 +354,7 @@ private fun AppContent(
                 onExternal = { state.reader.entry?.let(vm::openedExternally) },
                 onToggleSource = vm::toggleReaderSource,
                 onOpenMedia = { index -> state.reader.entry?.let { vm.openViewer(it, index) } },
+                onOpenCommentMedia = { item -> vm.openViewer(listOf(item)) },
                 comments = CommentActions(
                     loggedIn = state.hnUser != null && state.reader.comments?.source == CommentSource.HackerNews,
                     voted = { state.hnVoted(it, state.reader.comments?.thread?.page) },

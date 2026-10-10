@@ -34,7 +34,7 @@ sealed interface FetchResult {
     data object NotModified : FetchResult
 }
 
-class FetchException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class FetchException(message: String, cause: Throwable? = null, val status: Int? = null) : Exception(message, cause)
 
 /**
  * A kind of source. [accepts] decides from what the user typed (URL, handle, shorthand);

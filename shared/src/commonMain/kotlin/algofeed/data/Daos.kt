@@ -190,6 +190,9 @@ interface SettingDao {
 
     @Upsert
     suspend fun put(setting: Setting)
+
+    @Query("DELETE FROM setting WHERE key = :key")
+    suspend fun delete(key: String)
 }
 
 /** Clears subscriptions, entries and everything learned from them, in one transaction. Settings stay. */

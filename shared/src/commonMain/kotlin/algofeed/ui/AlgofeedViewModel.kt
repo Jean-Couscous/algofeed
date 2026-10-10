@@ -516,6 +516,12 @@ class AlgofeedViewModel(
         _state.update { it.copy(viewer = ViewerState(media, index.coerceIn(0, media.lastIndex), entry)) }
     }
 
+    /** Opens the full-screen viewer on an explicit media list (e.g. an attachment tapped in comments). */
+    fun openViewer(media: List<MediaItem>, index: Int = 0) {
+        if (media.isEmpty()) return
+        _state.update { it.copy(viewer = ViewerState(media, index.coerceIn(0, media.lastIndex), entry = null)) }
+    }
+
     fun closeViewer() = _state.update { it.copy(viewer = null) }
 
     private fun stopReadTimer() {

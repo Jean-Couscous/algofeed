@@ -2,6 +2,7 @@ package algofeed.ui
 
 import algofeed.data.Feed
 import algofeed.data.MediaCodec
+import algofeed.data.MediaItem
 import algofeed.data.MediaKind
 import algofeed.util.Urls
 import algofeed.util.relativeTime
@@ -73,6 +74,8 @@ fun ReaderPane(
     onToggleSource: () -> Unit,
     /** Opens the full-screen viewer on the entry's gallery item at this index. */
     onOpenMedia: (Int) -> Unit = {},
+    /** Opens the full-screen viewer on an attachment tapped in a comment. */
+    onOpenCommentMedia: (MediaItem) -> Unit = {},
     /** Set for HN stories. */
     comments: CommentActions? = null,
     modifier: Modifier = Modifier,
@@ -231,7 +234,7 @@ fun ReaderPane(
                 if (reader.comments != null && comments != null) {
                     // The column's top padding is above this position, which suits the scroll target.
                     Box(Modifier.onGloballyPositioned { commentsTop = it.positionInParent().y.toInt() }) {
-                        CommentsSection(reader.comments, comments, positions = postPositions, onOpenThread = { onExternal(); uri.openUri(reader.comments.threadUrl) })
+                        CommentsSection(reader.comments, comments, positions = postPositions, onOpenMedia = onOpenCommentMedia, onOpenThread = { onExternal(); uri.openUri(reader.comments.threadUrl) })
                     }
                 }
             }

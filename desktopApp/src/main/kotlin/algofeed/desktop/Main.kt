@@ -76,10 +76,14 @@ fun main() {
     val dbFile = System.getenv("ALGOFEED_DB")?.let(::File) ?: File(dataDir(), "algofeed.db")
     val db = Room.databaseBuilder<AppDatabase>(name = dbFile.absolutePath).buildAlgofeed()
     val client = createHttpClient()
-    // Desktop has no keystore; source keys live in the settings table, as the HN session does.
-    val secrets = algofeed.SecretReader { db.settings().get(it)?.ifBlank { null } }
+    // Store secrets in the OS keyring via the Secret Service (GNOME Keyring / KWallet) when one is
+    // reachable, moving any left in the settings table into it; otherwise keep the settings table.
+    val secretStore = SecretServiceStore.createOrNull()
+    if (secretStore != null) runBlocking { migratePlaintextSecrets(db, secretStore) }
+    val secrets = algofeed.SecretReader { secretStore?.secret(it) ?: db.settings().get(it)?.ifBlank { null } }
     val repo = Repository(
         db, defaultSources(client, secrets), createReaderExtractor(client),
+        secrets = secretStore,
         hackerNews = HackerNews(client),
         mangadexAuth = algofeed.fetch.MangadexAuth(client, secrets),
         embedder = loadEmbedder(),

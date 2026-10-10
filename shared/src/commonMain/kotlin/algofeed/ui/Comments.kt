@@ -1,5 +1,7 @@
 package algofeed.ui
 
+import algofeed.data.MediaItem
+import algofeed.data.MediaKind
 import algofeed.fetch.HackerNews
 import algofeed.fetch.Comment
 import algofeed.util.relativeTime
@@ -22,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import coil3.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ThumbUp
@@ -68,6 +69,8 @@ fun CommentsSection(
     onOpenThread: () -> Unit,
     /** Each comment reports its root-space top here, so a quote link can scroll to it. */
     positions: MutableMap<Long, Float>? = null,
+    /** Opens an attachment tapped in a comment in the full-screen viewer. */
+    onOpenMedia: (MediaItem) -> Unit = {},
 ) {
     val canWrite = actions.loggedIn
     var collapsed by remember(state.storyId) { mutableStateOf(emptySet<Long>()) }
@@ -118,6 +121,7 @@ fun CommentsSection(
                 },
                 onToggle = { collapsed = if (comment.id in collapsed) collapsed - comment.id else collapsed + comment.id },
                 onReply = { replyTo = ReplyTarget(comment.id, comment.author) },
+                onOpenMedia = onOpenMedia,
             )
           }
         }
@@ -136,6 +140,16 @@ private fun flatten(comments: List<Comment>, collapsed: Set<Long>, depth: Int = 
 
 private fun countAll(comments: List<Comment>): Int = comments.sumOf { 1 + countAll(it.children) }
 
+/** The comment's attachment as a viewer media item, or null when it has none. */
+private fun Comment.attachment(): MediaItem? {
+    val url = videoUrl ?: imageUrl ?: return null
+    return MediaItem(
+        url = url,
+        kind = if (videoUrl != null) MediaKind.VIDEO else MediaKind.IMAGE,
+        thumbnailUrl = thumbnailUrl,
+    )
+}
+
 @Composable
 private fun CommentRow(
     comment: Comment,
@@ -146,6 +160,7 @@ private fun CommentRow(
     linkBase: String,
     onToggle: () -> Unit,
     onReply: () -> Unit,
+    onOpenMedia: (MediaItem) -> Unit,
 ) {
     // Deep threads stop indenting so text keeps a readable width on phones.
     Row(Modifier.padding(start = (depth.coerceAtMost(6) * 12).dp).height(IntrinsicSize.Min)) {
@@ -191,8 +206,8 @@ private fun CommentRow(
             }
             if (!collapsed) {
                 comment.html?.let { HtmlContent(it, linkBase, compact = true) }
-                val uri = LocalUriHandler.current
                 val topPad = if (comment.html != null) 8.dp else 0.dp
+                val attachment = comment.attachment()
                 when {
                     comment.videoUrl != null && inlineVideoSupported -> InlineVideo(
                         url = comment.videoUrl,
@@ -201,9 +216,9 @@ private fun CommentRow(
                         muted = false,
                         showControls = true,
                         modifier = Modifier.padding(top = topPad).fillMaxWidth().sizeIn(maxWidth = 360.dp),
-                        onClick = null,
+                        onClick = attachment?.let { { onOpenMedia(it) } },
                     )
-                    comment.thumbnailUrl != null -> AsyncImage(
+                    comment.thumbnailUrl != null && attachment != null -> AsyncImage(
                         model = comment.thumbnailUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
@@ -211,8 +226,7 @@ private fun CommentRow(
                             .padding(top = topPad)
                             .sizeIn(maxWidth = 240.dp, maxHeight = 240.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            // Not playable inline (desktop) falls back to opening the file.
-                            .clickable { (comment.imageUrl ?: comment.videoUrl)?.let(uri::openUri) },
+                            .clickable { onOpenMedia(attachment) },
                     )
                 }
                 if (comment.html == null && comment.thumbnailUrl == null) {

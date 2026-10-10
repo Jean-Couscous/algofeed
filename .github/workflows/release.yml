@@ -70,7 +70,11 @@ jobs:
             -Palgofeed.release.storeFile="$keystore" -Palgofeed.release.storePassword="$STORE_PASSWORD" \
             -Palgofeed.release.keyAlias="$KEY_ALIAS" -Palgofeed.release.keyPassword="$KEY_PASSWORD"
           rm -f "$keystore"
-          mv androidApp/build/outputs/apk/release/androidApp-release.apk "algofeed-$VERSION_NAME.apk"
+          # ABI splits produce one APK per ABI. arm64-v8a is the primary download (every current
+          # phone); x86_64 is kept for emulators under a suffixed name.
+          out=androidApp/build/outputs/apk/release
+          mv "$out/androidApp-arm64-v8a-release.apk" "algofeed-$VERSION_NAME.apk"
+          mv "$out/androidApp-x86_64-release.apk" "algofeed-$VERSION_NAME-x86_64.apk"
 
       # Without the mapping file, crash stack traces from this build can't be decoded.
       - uses: actions/upload-artifact@v7
@@ -84,7 +88,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v$VERSION_NAME" "algofeed-$VERSION_NAME.apk" \
+          gh release create "v$VERSION_NAME" \
+            "algofeed-$VERSION_NAME.apk" "algofeed-$VERSION_NAME-x86_64.apk" \
             --target "$GITHUB_SHA" --title "Algofeed $VERSION_NAME" \
             --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
           echo "tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
